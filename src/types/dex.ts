@@ -45,6 +45,8 @@ export interface MakerResult {
 export interface TakerParams extends BaseParams {
   orderOutPoints: Hex[]
   buyer: Address
+  platform: Address
+  platformFee: number
 }
 
 export interface TakerResult {

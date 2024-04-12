@@ -1,5 +1,5 @@
 import { addressToScript, blake160, getTransactionSize, serializeScript, serializeWitnessArgs } from '@nervosnetwork/ckb-sdk-utils'
-import { getCotaTypeScript, getJoyIDCellDep, getDexCellDep, MAX_FEE, JOYID_ESTIMATED_WITNESS_LOCK_SIZE, CKB_UNIT } from '../constants'
+import { getCotaTypeScript, getJoyIDCellDep, getDexCellDep, MAX_FEE, JOYID_ESTIMATED_WITNESS_LOCK_SIZE, CKB_UNIT, MIN_CAPACITY } from '../constants'
 import { CKBAsset, Hex, SubkeyUnlockReq, TakerParams, TakerResult } from '../types'
 import { append0x } from '../utils'
 import { AssetException, NoCotaCellException, NoLiveCellException } from '../exceptions'
@@ -16,6 +16,25 @@ import {
 import { OrderArgs } from './orderArgs'
 import { CKBTransaction } from '@joyid/ckb'
 import { calculateNFTMakerListPackage } from './maker'
+
+export const setPlatformFeeOutputs = (feeLock: CKBComponents.Script,sumSellerCapacity: bigint,platformFee: number) => {
+  const feeOutputs: CKBComponents.CellOutput[] = []
+  const feeOutputsData: Hex[] = []
+  const platformFeeBigInt = BigInt(Math.floor(platformFee * 100));
+
+  let payFeeCapacity = (sumSellerCapacity * platformFeeBigInt) / BigInt(10000);
+  if(payFeeCapacity < MIN_CAPACITY){
+    payFeeCapacity = MIN_CAPACITY
+  }
+  const output: CKBComponents.CellOutput = {
+    lock: feeLock,
+    capacity: append0x(payFeeCapacity.toString(16)),
+  }
+  feeOutputs.push(output)
+  feeOutputsData.push('0x')
+  return { feeOutputs, feeOutputsData, payFeeCapacity }
+}
+
 
 export const matchOrderOutputs = (orderCells: CKBComponents.LiveCell[]) => {
   const sellerOutputs: CKBComponents.CellOutput[] = []
@@ -77,6 +96,8 @@ export const buildTakerTx = async ({
   orderOutPoints,
   fee,
   ckbAsset = CKBAsset.XUDT,
+  platform,
+  platformFee
 }: TakerParams): Promise<TakerResult> => {
   let txFee = fee ?? MAX_FEE
   const isMainnet = buyer.startsWith('ckb')
@@ -120,9 +141,20 @@ export const buildTakerTx = async ({
     const { sellerOutputs, sellerOutputsData, sumSellerCapacity } = matchOrderOutputs(orderCells)
     const { udtOutputs, udtOutputsData, sumUdtCapacity } = cleanUpUdtOutputs(orderCells, buyerLock)
 
-    const needInputsCapacity = sumSellerCapacity + sumUdtCapacity
+
+
+    let needInputsCapacity = sumSellerCapacity + sumUdtCapacity
     outputs = [...sellerOutputs, ...udtOutputs]
     outputsData = [...sellerOutputsData, ...udtOutputsData]
+
+    if(platform){
+      const platformLock = addressToScript(platform)
+      const { feeOutputs, feeOutputsData, payFeeCapacity } = setPlatformFeeOutputs(platformLock, sumSellerCapacity,platformFee)
+      needInputsCapacity += payFeeCapacity
+      outputs = [...outputs, ...feeOutputs]
+      outputsData = [...outputsData, ...feeOutputsData]
+    }
+
 
     const minCellCapacity = calculateEmptyCellMinCapacity(buyerLock)
     const needCKB = ((needInputsCapacity + minCellCapacity + CKB_UNIT) / CKB_UNIT).toString()
