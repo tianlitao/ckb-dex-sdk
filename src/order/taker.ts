@@ -1,5 +1,5 @@
 import { addressToScript, blake160, getTransactionSize, serializeScript, serializeWitnessArgs } from '@nervosnetwork/ckb-sdk-utils'
-import { getCotaTypeScript, getJoyIDCellDep, getDexCellDep, MAX_FEE, JOYID_ESTIMATED_WITNESS_LOCK_SIZE, CKB_UNIT, MIN_CAPACITY } from '../constants'
+import { getCotaTypeScript, getJoyIDCellDep, getDexCellDep, MAX_FEE, JOYID_ESTIMATED_WITNESS_LOCK_SIZE, CKB_UNIT, getAnyOneCanPayCellDep } from '../constants'
 import { CKBAsset, Hex, SubkeyUnlockReq, TakerParams, TakerResult } from '../types'
 import { append0x } from '../utils'
 import { AssetException, NoCotaCellException, NoLiveCellException } from '../exceptions'
@@ -16,16 +16,18 @@ import {
 import { OrderArgs } from './orderArgs'
 import { CKBTransaction } from '@joyid/ckb'
 import { calculateNFTMakerListPackage } from './maker'
+import { ANYONE_CAN_PAY_MAINNET } from '@nervosnetwork/ckb-sdk-utils/lib/systemScripts'
 
-export const setPlatformFeeOutputs = (feeLock: CKBComponents.Script,sumSellerCapacity: bigint,platformFee: number) => {
+export const setPlatformFeeOutputs = (feeLock: CKBComponents.Script,sumSellerCapacity: bigint,platformFee: number,capacity: bigint) => {
   const feeOutputs: CKBComponents.CellOutput[] = []
   const feeOutputsData: Hex[] = []
   const platformFeeBigInt = BigInt(Math.floor(platformFee * 100));
 
   let payFeeCapacity = (sumSellerCapacity * platformFeeBigInt) / BigInt(10000);
-  if(payFeeCapacity < MIN_CAPACITY){
-    payFeeCapacity = MIN_CAPACITY
-  }
+  // if(payFeeCapacity < MIN_CAPACITY){
+  //   payFeeCapacity = MIN_CAPACITY
+  // }
+  payFeeCapacity += capacity
   const output: CKBComponents.CellOutput = {
     lock: feeLock,
     capacity: append0x(payFeeCapacity.toString(16)),
@@ -97,7 +99,8 @@ export const buildTakerTx = async ({
   fee,
   ckbAsset = CKBAsset.XUDT,
   platform,
-  platformFee
+  platformFee,
+  platformCell
 }: TakerParams): Promise<TakerResult> => {
   let txFee = fee ?? MAX_FEE
   const isMainnet = buyer.startsWith('ckb')
@@ -130,10 +133,11 @@ export const buildTakerTx = async ({
     since: '0x0',
   }))
 
+
   let inputs: CKBComponents.CellInput[] = []
   let outputs: CKBComponents.CellOutput[] = []
   let outputsData: Hex[] = []
-  let cellDeps: CKBComponents.CellDep[] = [getDexCellDep(isMainnet)]
+  let cellDeps: CKBComponents.CellDep[] = [getDexCellDep(isMainnet),getAnyOneCanPayCellDep(isMainnet)]
   let changeCapacity = BigInt(0)
   let sporeCoBuild = '0x'
 
@@ -149,7 +153,7 @@ export const buildTakerTx = async ({
 
     if(platform){
       const platformLock = addressToScript(platform)
-      const { feeOutputs, feeOutputsData, payFeeCapacity } = setPlatformFeeOutputs(platformLock, sumSellerCapacity,platformFee)
+      const { feeOutputs, feeOutputsData, payFeeCapacity } = setPlatformFeeOutputs(platformLock, sumSellerCapacity,platformFee, platformCell['capacity'])
       needInputsCapacity += payFeeCapacity
       outputs = [...outputs, ...feeOutputs]
       outputsData = [...outputsData, ...feeOutputsData]
@@ -166,7 +170,17 @@ export const buildTakerTx = async ({
       minCellCapacity,
       errMsg,
     )
-    inputs = [...orderInputs, ...emptyInputs]
+    if(platform){
+      const anyOneInput: CKBComponents.CellInput[] = [
+        {
+            previousOutput: {txHash: platformCell['txHash'], index: platformCell['index']},
+            since: '0x0',
+        }
+      ]
+      inputs = [...orderInputs, ...emptyInputs,...anyOneInput]
+    }else{
+      inputs = [...orderInputs, ...emptyInputs]
+    }
 
     changeCapacity = inputsCapacity - needInputsCapacity - txFee
     const changeOutput: CKBComponents.CellOutput = {

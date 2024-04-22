@@ -1,7 +1,7 @@
 import { CKBTransaction, ConnectResponseData } from '@joyid/ckb'
 import { Aggregator } from '../aggregator'
 import { Collector } from '../collector'
-import { Address, Hex } from './common'
+import { Address, Hex ,Bytes} from './common'
 
 export interface JoyIDConfig {
   aggregator: Aggregator
@@ -47,6 +47,7 @@ export interface TakerParams extends BaseParams {
   buyer: Address
   platform: Address
   platformFee: number
+  platformCell: {txHash: Bytes, index: Bytes, capacity: bigint}
 }
 
 export interface TakerResult {

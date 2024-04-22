@@ -49,6 +49,15 @@ const TestnetInfo = {
     depType: 'code',
   } as CKBComponents.CellDep,
 
+  AnyOneCanPayLockDep: {
+    outPoint: {
+      txHash: '0xec26b0f85ed839ece5f11c4c4e837ec359f5adc4420410f6453b1f6b60fb96a6',
+      index: '0x0',
+    },
+    depType: 'depGroup',
+  } as CKBComponents.CellDep,
+
+
   XUDTTypeScript: {
     codeHash: '0x25c29dc317811a6f6f3985a7a9ebc4838bd388d19d0feeecf0bcd60f6c0975bb',
     hashType: 'type',
@@ -149,6 +158,14 @@ const MainnetInfo = {
     depType: 'code',
   } as CKBComponents.CellDep,
 
+  AnyOneCanPayLockDep: {
+    outPoint: {
+      txHash: '0x4153a2014952d7cac45f285ce9a7c5c0c0e1b21f2d378b82ac1433cb11c25c4d',
+      index: '0x0',
+    },
+    depType: 'depGroup',
+  } as CKBComponents.CellDep,
+
   XUDTTypeScript: {
     codeHash: '0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95',
     hashType: 'data1',
@@ -226,3 +243,5 @@ export const getSporeDep = (isMainnet: boolean) => (isMainnet ? MainnetInfo.Spor
 
 export const getMNftTypeScript = (isMainnet: boolean) => (isMainnet ? MainnetInfo.MNftTypeScript : TestnetInfo.MNftTypeScript)
 export const getMNftDep = (isMainnet: boolean) => (isMainnet ? MainnetInfo.MNftTypeDep : TestnetInfo.MNftTypeDep)
+
+export const getAnyOneCanPayCellDep = (isMainnet: boolean) => (isMainnet ? MainnetInfo.AnyOneCanPayLockDep : TestnetInfo.AnyOneCanPayLockDep)
