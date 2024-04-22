@@ -38,25 +38,6 @@ export const setPlatformFeeOutputs = (feeLock: CKBComponents.Script,sumSellerCap
 }
 
 
-export const setPlatformFeeOutputs = (feeLock: CKBComponents.Script,sumSellerCapacity: bigint,platformFee: number) => {
-  const feeOutputs: CKBComponents.CellOutput[] = []
-  const feeOutputsData: Hex[] = []
-  const platformFeeBigInt = BigInt(Math.floor(platformFee * 100));
-
-  let payFeeCapacity = (sumSellerCapacity * platformFeeBigInt) / BigInt(10000);
-  if(payFeeCapacity < MIN_CAPACITY){
-    payFeeCapacity = MIN_CAPACITY
-  }
-  const output: CKBComponents.CellOutput = {
-    lock: feeLock,
-    capacity: append0x(payFeeCapacity.toString(16)),
-  }
-  feeOutputs.push(output)
-  feeOutputsData.push('0x')
-  return { feeOutputs, feeOutputsData, payFeeCapacity }
-}
-
-
 export const matchOrderOutputs = (orderCells: CKBComponents.LiveCell[]) => {
   const sellerOutputs: CKBComponents.CellOutput[] = []
   const sellerOutputsData: Hex[] = []
@@ -193,13 +174,13 @@ export const buildTakerTx = async ({
       errMsg,
     )
     if(platform){
-      anyOneInputs.push(
+      const anyOneInput: CKBComponents.CellInput[] = [
         {
             previousOutput: {txHash: platformCell['txHash'], index: platformCell['index']},
             since: '0x0',
         }
-      )
-      inputs = [...orderInputs,...anyOneInputs, ...emptyInputs]
+      ]
+      inputs = [...orderInputs, ...emptyInputs,...anyOneInput]
     }else{
       inputs = [...orderInputs, ...emptyInputs]
     }
