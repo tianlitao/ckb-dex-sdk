@@ -140,6 +140,9 @@ export const buildTakerTx = async ({
   let cellDeps: CKBComponents.CellDep[] = [getDexCellDep(isMainnet),getAnyOneCanPayCellDep(isMainnet)]
   let changeCapacity = BigInt(0)
   let sporeCoBuild = '0x'
+  let anyOneInputs: CKBComponents.CellInput[] = []
+
+
 
   if (isUdtAsset(ckbAsset)) {
     const { sellerOutputs, sellerOutputsData, sumSellerCapacity } = matchOrderOutputs(orderCells)
@@ -171,13 +174,13 @@ export const buildTakerTx = async ({
       errMsg,
     )
     if(platform){
-      const anyOneInput: CKBComponents.CellInput[] = [
+      anyOneInputs.push(
         {
             previousOutput: {txHash: platformCell['txHash'], index: platformCell['index']},
             since: '0x0',
         }
-      ]
-      inputs = [...orderInputs, ...emptyInputs,...anyOneInput]
+      )
+      inputs = [...orderInputs,...anyOneInputs, ...emptyInputs]
     }else{
       inputs = [...orderInputs, ...emptyInputs]
     }
@@ -227,7 +230,7 @@ export const buildTakerTx = async ({
   }
 
   const emptyWitness = { lock: '', inputType: '', outputType: '' }
-  const witnesses = inputs.map((_, index) => (index === orderInputs.length ? serializeWitnessArgs(emptyWitness) : '0x'))
+  const witnesses = inputs.map((_, index) => (index === orderInputs.length+anyOneInputs.length ? serializeWitnessArgs(emptyWitness) : '0x'))
   if (ckbAsset === CKBAsset.SPORE) {
     witnesses.push(sporeCoBuild)
   } else if (ckbAsset === CKBAsset.MNFT) {
@@ -279,5 +282,5 @@ export const buildTakerTx = async ({
     tx.outputs[tx.outputs.length - 1].capacity = append0x(estimatedChangeCapacity.toString(16))
   }
 
-  return { rawTx: tx as CKBTransaction, txFee, witnessIndex: orderInputs.length }
+  return { rawTx: tx as CKBTransaction, txFee, witnessIndex: orderInputs.length+anyOneInputs.length }
 }
