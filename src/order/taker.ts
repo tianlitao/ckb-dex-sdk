@@ -174,13 +174,13 @@ export const buildTakerTx = async ({
       errMsg,
     )
     if(platform){
-      const anyOneInput: CKBComponents.CellInput[] = [
+      anyOneInputs.push(
         {
             previousOutput: {txHash: platformCell['txHash'], index: platformCell['index']},
             since: '0x0',
         }
-      ]
-      inputs = [...orderInputs, ...emptyInputs,...anyOneInput]
+      )
+      inputs = [...orderInputs,...anyOneInputs, ...emptyInputs]
     }else{
       inputs = [...orderInputs, ...emptyInputs]
     }
