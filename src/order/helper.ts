@@ -1,6 +1,6 @@
 import BigNumber from 'bignumber.js'
 import { assembleTransferSporeAction, assembleCobuildWitnessLayout } from '@spore-sdk/core/lib/cobuild'
-import { CKB_UNIT, getMNftDep, getSporeDep, getSudtDep, getXudtDep } from '../constants'
+import { CKB_UNIT, getMNftDep, getSporeDep, getSudtDep, getXudtDep, getXudtTypeScript, getSudtTypeScript, getSporeTypeScript,getMNftTypeScript, getBitTypeScript, getBitDep } from '../constants'
 import { append0x, leToU128, remove0x, u128ToLe } from '../utils'
 import { CKBAsset, Hex, IndexerCell } from '../types'
 import { blockchain, Cell as LumosCell } from '@ckb-lumos/base'
@@ -120,6 +120,23 @@ export const getAssetCellDep = (asset: CKBAsset, isMainnet: boolean) => {
       return getSporeDep(isMainnet)
     case CKBAsset.MNFT:
       return getMNftDep(isMainnet)
+    default:
+      return getXudtDep(isMainnet)
+  }
+}
+
+export const getAssetCellDepNew = (codeHash: String, isMainnet: boolean) => {
+  switch (codeHash) {
+    case getXudtTypeScript(isMainnet).codeHash:
+      return getXudtDep(isMainnet)
+    case getSudtTypeScript(isMainnet).codeHash:
+      return getSudtDep(isMainnet)
+    case getSporeTypeScript(isMainnet).codeHash:
+      return getSporeDep(isMainnet)
+    case getMNftTypeScript(isMainnet).codeHash:
+      return getMNftDep(isMainnet)
+    case getBitTypeScript(isMainnet).codeHash:
+      return getBitDep(isMainnet)
     default:
       return getXudtDep(isMainnet)
   }

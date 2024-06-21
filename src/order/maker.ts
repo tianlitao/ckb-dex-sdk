@@ -10,7 +10,7 @@ import {
   calculateTransactionFee,
   calculateUdtCellCapacity,
   generateSporeCoBuild,
-  getAssetCellDep,
+  getAssetCellDepNew,
   isUdtAsset,
 } from './helper'
 import { CKBTransaction } from '@joyid/ckb'
@@ -181,7 +181,7 @@ export const buildMakerTx = async ({
     }
   }
 
-  cellDeps.push(getAssetCellDep(ckbAsset, isMainnet))
+  cellDeps.push(getAssetCellDepNew(assetTypeScript.codeHash, isMainnet))
   if (joyID) {
     cellDeps.push(getJoyIDCellDep(isMainnet))
   }

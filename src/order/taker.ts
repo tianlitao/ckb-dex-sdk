@@ -11,7 +11,7 @@ import {
   isUdtAsset,
   calculateNFTCellCapacity,
   generateSporeCoBuild,
-  getAssetCellDep,
+  getAssetCellDepNew,
 } from './helper'
 import { OrderArgs } from './orderArgs'
 import { CKBTransaction } from '@joyid/ckb'
@@ -103,6 +103,7 @@ export const buildTakerTx = async ({
   platformCell
 }: TakerParams): Promise<TakerResult> => {
   let txFee = fee ?? MAX_FEE
+  let codeHash = "0x"
   const isMainnet = buyer.startsWith('ckb')
   const buyerLock = addressToScript(buyer)
 
@@ -126,6 +127,7 @@ export const buildTakerTx = async ({
     if (!cell.output.type || !cell.data) {
       throw new AssetException('The udt cell specified by the out point must have type script')
     }
+    codeHash = cell.output.type!.codeHash
     orderCells.push(cell)
   }
   const orderInputs: CKBComponents.CellInput[] = outPoints.map(outPoint => ({
@@ -224,7 +226,7 @@ export const buildTakerTx = async ({
     outputsData.push('0x')
   }
 
-  cellDeps.push(getAssetCellDep(ckbAsset, isMainnet))
+  cellDeps.push(getAssetCellDepNew(codeHash, isMainnet))
   if (joyID) {
     cellDeps.push(getJoyIDCellDep(isMainnet))
   }

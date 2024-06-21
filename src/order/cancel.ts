@@ -10,7 +10,7 @@ import {
   cleanUpUdtOutputs as cleanUpUdtOutputs,
   deserializeOutPoints,
   generateSporeCoBuild,
-  getAssetCellDep,
+  getAssetCellDepNew,
   isUdtAsset,
 } from './helper'
 import { CKBTransaction } from '@joyid/ckb'
@@ -25,6 +25,7 @@ export const buildCancelTx = async ({
   ckbAsset = CKBAsset.XUDT,
 }: CancelParams): Promise<TakerResult> => {
   let txFee = fee ?? MAX_FEE
+  let codeHash = "0x"
   const isMainnet = seller.startsWith('ckb')
   const sellerLock = addressToScript(seller)
 
@@ -52,6 +53,7 @@ export const buildCancelTx = async ({
     if (!cell.output.type || !cell.data) {
       throw new AssetException('The asset cell specified by the out point must have type script')
     }
+    codeHash = cell.output.type!.codeHash
     orderInputsCapacity += BigInt(cell.output.capacity)
     orderCells.push(cell)
   }
@@ -103,7 +105,7 @@ export const buildCancelTx = async ({
   outputs.push(changeOutput)
   outputsData.push('0x')
 
-  cellDeps.push(getAssetCellDep(ckbAsset, isMainnet))
+  cellDeps.push(getAssetCellDepNew(codeHash, isMainnet))
   if (joyID) {
     cellDeps.push(getJoyIDCellDep(isMainnet))
   }

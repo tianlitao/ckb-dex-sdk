@@ -113,6 +113,20 @@ const TestnetInfo = {
     },
     depType: 'code',
   } as CKBComponents.CellDep,
+
+  BitTypeScript: {
+    codeHash: '0x0b1f412fbae26853ff7d082d422c2bdd9e2ff94ee8aaec11240a5b34cc6e890f',
+    hashType: 'type',
+    args: '0xa6877b034b6df9165fb977936c361308ce12ba5839b7a6679315dc600ad055de',
+  } as CKBComponents.Script,
+
+  BitTypeDep: {
+    outPoint: {
+      txHash: '0x37f82dd30435575954cc7a9e2292f238ed24d71b0d57a55d8a2fc8a08aa1accf',
+      index: '0x0',
+    },
+    depType: 'code',
+  } as CKBComponents.CellDep,
 }
 
 const MainnetInfo = {
@@ -221,6 +235,20 @@ const MainnetInfo = {
     },
     depType: 'code',
   } as CKBComponents.CellDep,
+
+  BitTypeScript: {
+    codeHash: '',
+    hashType: 'type',
+    args: '',
+  } as CKBComponents.Script,
+
+  BitTypeDep: {
+    outPoint: {
+      txHash: '',
+      index: '',
+    },
+    depType: 'code',
+  } as CKBComponents.CellDep,
 }
 
 export const getJoyIDLockScript = (isMainnet: boolean) => (isMainnet ? MainnetInfo.JoyIDLockScript : TestnetInfo.JoyIDLockScript)
@@ -243,5 +271,9 @@ export const getSporeDep = (isMainnet: boolean) => (isMainnet ? MainnetInfo.Spor
 
 export const getMNftTypeScript = (isMainnet: boolean) => (isMainnet ? MainnetInfo.MNftTypeScript : TestnetInfo.MNftTypeScript)
 export const getMNftDep = (isMainnet: boolean) => (isMainnet ? MainnetInfo.MNftTypeDep : TestnetInfo.MNftTypeDep)
+
+export const getBitTypeScript = (isMainnet: boolean) => (isMainnet ? MainnetInfo.BitTypeScript : TestnetInfo.BitTypeScript)
+export const getBitDep = (isMainnet: boolean) => (isMainnet ? MainnetInfo.BitTypeDep : TestnetInfo.BitTypeDep)
+
 
 export const getAnyOneCanPayCellDep = (isMainnet: boolean) => (isMainnet ? MainnetInfo.AnyOneCanPayLockDep : TestnetInfo.AnyOneCanPayLockDep)
