@@ -237,15 +237,15 @@ const MainnetInfo = {
   } as CKBComponents.CellDep,
 
   BitTypeScript: {
-    codeHash: '',
+    codeHash: '0xcfba73b58b6f30e70caed8a999748781b164ef9a1e218424a6fb55ebf641cb33',
     hashType: 'type',
-    args: '',
+    args: '0x2717bc17500393ed29bfb038025dba00cffb0ac3e588060b96ed54650a8230ae',
   } as CKBComponents.Script,
 
   BitTypeDep: {
     outPoint: {
-      txHash: '',
-      index: '',
+      txHash: '0xeda235b56aa422c497b9b9bcfde7af289376e7fe12449ade99176609005994ba',
+      index: '0x0',
     },
     depType: 'code',
   } as CKBComponents.CellDep,
