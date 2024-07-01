@@ -122,7 +122,7 @@ const TestnetInfo = {
 
   BitTypeDep: {
     outPoint: {
-      txHash: '0xba16ef62509b67af5bf062ed1a3b8a4646100211d098181b2cfefcf013231a6e',
+      txHash: '0xf3a12e97b70353b67c774bb10aa34baf00371f5d94150be2c7c39a7692c99b40',
       index: '0x0',
     },
     depType: 'code',
