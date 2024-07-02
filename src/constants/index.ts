@@ -115,14 +115,14 @@ const TestnetInfo = {
   } as CKBComponents.CellDep,
 
   BitTypeScript: {
-    codeHash: '0x0b1f412fbae26853ff7d082d422c2bdd9e2ff94ee8aaec11240a5b34cc6e890f',
+    codeHash: '0x295fa7f597160712f3c07942b544e05cbff45b9068f1158220b6266fbd70ac57',
     hashType: 'type',
     args: '0xa6877b034b6df9165fb977936c361308ce12ba5839b7a6679315dc600ad055de',
   } as CKBComponents.Script,
 
   BitTypeDep: {
     outPoint: {
-      txHash: '0xf3a12e97b70353b67c774bb10aa34baf00371f5d94150be2c7c39a7692c99b40',
+      txHash: '0x29d0123dda05cb92452a46df609e9bd08e066d62f0c3953fe34935dc10edfdcc',
       index: '0x0',
     },
     depType: 'code',
