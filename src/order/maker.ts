@@ -12,6 +12,7 @@ import {
   generateSporeCoBuild,
   getAssetCellDepNew,
   isUdtAsset,
+  extraLockCellCapacity
 } from './helper'
 import { CKBTransaction } from '@joyid/ckb'
 import { OrderArgs } from './orderArgs'
@@ -144,6 +145,7 @@ export const buildMakerTx = async ({
     }
     const nftCell = nftCells[0]
     orderCellCapacity = calculateNFTCellCapacity(orderLock, nftCell)
+    orderCellCapacity += extraLockCellCapacity(sellerLock)
     const nftInputCapacity = BigInt(nftCell.output.capacity)
     const orderNeedCapacity = orderCellCapacity > nftInputCapacity ? orderCellCapacity - nftInputCapacity : BigInt(0)
 

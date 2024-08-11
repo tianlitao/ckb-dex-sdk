@@ -6,6 +6,16 @@ import { CKBAsset, Hex, IndexerCell } from '../types'
 import { blockchain, Cell as LumosCell } from '@ckb-lumos/base'
 import { serializeScript } from '@nervosnetwork/ckb-sdk-utils'
 
+// maker get the minimum capacity of the cell
+export const extraLockCellCapacity = (lock: CKBComponents.Script): bigint => {
+    const lockArgsSize = remove0x(lock.args).length / 2
+    let extra = 0;
+    if(lockArgsSize < 22) {
+        extra = 22 - lockArgsSize
+    }
+    return BigInt(extra) * CKB_UNIT
+}
+
 // minimum occupied capacity and 1 ckb for transaction fee
 // assume UDT cell data size is 16bytes
 export const calculateUdtCellCapacity = (lock: CKBComponents.Script, udtType?: CKBComponents.Script): bigint => {
