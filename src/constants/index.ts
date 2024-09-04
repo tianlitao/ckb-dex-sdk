@@ -122,7 +122,7 @@ const TestnetInfo = {
 
   BitTypeDep: {
     outPoint: {
-      txHash: '0x1bda44bf86d240b739e035ade4eae2d8a53085210c6dab96b49ffeacb8c1174e',
+      txHash: '0x306961e0eb04ed972c60cb89a0aed1b0ef065d96d2fc0000c62db5275e32dc6f',
       index: '0x0',
     },
     depType: 'code',
@@ -244,7 +244,7 @@ const MainnetInfo = {
 
   BitTypeDep: {
     outPoint: {
-      txHash: '0xea4ae2d84ccae6fd3c4a55e348a5400a6166e33114bcafbc758e012ac8bd3c80',
+      txHash: '0xc4e296d8dc96636603d404cc5762cc865baff234e2e0adf07b4de6ca059312ba',
       index: '0x0',
     },
     depType: 'code',
