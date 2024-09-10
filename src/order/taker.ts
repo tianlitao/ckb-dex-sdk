@@ -237,7 +237,10 @@ export const buildTakerTx = async ({
     witnesses.push(sporeCoBuild)
   } else if (ckbAsset === CKBAsset.MNFT) {
     // MNFT must not be held and transferred by anyone-can-pay lock
-    witnesses[orderInputs.length-1] = serializeWitnessArgs({ lock: '0x00', inputType: '', outputType: '' })
+    orderInputs.forEach((_, index) => {
+      witnesses[index] = serializeWitnessArgs({ lock: '0x00', inputType: '', outputType: '' })
+    })
+
   }
   if (joyID && joyID.connectData.keyType === 'sub_key') {
     const pubkeyHash = append0x(blake160(append0x(joyID.connectData.pubkey), 'hex'))
