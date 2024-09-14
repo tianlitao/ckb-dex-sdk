@@ -244,7 +244,7 @@ const MainnetInfo = {
 
   BitTypeDep: {
     outPoint: {
-      txHash: '0xc4e296d8dc96636603d404cc5762cc865baff234e2e0adf07b4de6ca059312ba',
+      txHash: '0x37c80ba8124780920bc8fe06b49e3535b43ca339bb9a97fb462b16d575bfa9a6',
       index: '0x0',
     },
     depType: 'code',
