@@ -1,6 +1,6 @@
 {
   "name": "omiga-dex",
-  "version": "0.0.41",
+  "version": "0.0.42",
   "description": "The JavaScript SDK for CKB DEX",
   "author": "duanyytop <duanyytop@gmail.com>",
   "license": "MIT",
