@@ -1,6 +1,18 @@
 import BigNumber from 'bignumber.js'
 import { assembleTransferSporeAction, assembleCobuildWitnessLayout } from '@spore-sdk/core/lib/cobuild'
-import { CKB_UNIT, getMNftDep, getSporeDep, getSudtDep, getXudtDep, getXudtTypeScript, getSudtTypeScript, getSporeTypeScript,getMNftTypeScript, getBitTypeScript, getBitDep } from '../constants'
+import {
+  CKB_UNIT,
+  getMNftDep,
+  getSporeDep,
+  getSudtDep,
+  getXudtDep,
+  getXudtTypeScript,
+  getSudtTypeScript,
+  getSporeTypeScript,
+  getMNftTypeScript,
+  getBitTypeScript,
+  getBitDep,
+} from '../constants'
 import { append0x, leToU128, remove0x, u128ToLe } from '../utils'
 import { CKBAsset, Hex, IndexerCell } from '../types'
 import { blockchain, Cell as LumosCell } from '@ckb-lumos/base'
@@ -8,12 +20,12 @@ import { serializeScript } from '@nervosnetwork/ckb-sdk-utils'
 
 // maker get the minimum capacity of the cell
 export const extraLockCellCapacity = (lock: CKBComponents.Script): bigint => {
-    const lockArgsSize = remove0x(lock.args).length / 2
-    let extra = 0;
-    if(lockArgsSize < 22) {
-        extra = 22 - lockArgsSize
-    }
-    return BigInt(extra) * CKB_UNIT
+  const lockArgsSize = remove0x(lock.args).length / 2
+  let extra = 0
+  if (lockArgsSize < 22) {
+    extra = 22 - lockArgsSize
+  }
+  return BigInt(extra) * CKB_UNIT
 }
 
 // minimum occupied capacity and 1 ckb for transaction fee
@@ -22,7 +34,7 @@ export const calculateUdtCellCapacity = (lock: CKBComponents.Script, udtType?: C
   const lockArgsSize = remove0x(lock.args).length / 2
   const typeArgsSize = udtType ? remove0x(udtType.args).length / 2 : 32
   const cellSize = 33 + lockArgsSize + 33 + typeArgsSize + 8 + 16
-  return BigInt(cellSize + 1) * CKB_UNIT
+  return BigInt((cellSize + 1) * 10) * CKB_UNIT / BigInt(10)
 }
 
 // minimum occupied capacity and 1 ckb for transaction fee

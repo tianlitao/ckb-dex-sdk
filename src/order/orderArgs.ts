@@ -1,6 +1,6 @@
 import { blockchain } from '@ckb-lumos/base'
 import { OrderLockArgsException } from '../exceptions'
-import { Hex } from '../types'
+import { Hex, Address } from '../types'
 import { append0x, beToU128, leToU32, remove0x, u128ToBe, u8ToHex } from '../utils'
 import { serializeScript } from '@nervosnetwork/ckb-sdk-utils'
 
@@ -8,11 +8,13 @@ export class OrderArgs {
   public ownerLock: CKBComponents.Script
   public setup: number
   public totalValue: bigint
+  public unitTypeHash?: Address
 
-  constructor(ownerLock: CKBComponents.Script, setup: number, totalValue: bigint) {
+  constructor(ownerLock: CKBComponents.Script, setup: number, totalValue: bigint, unitTypeHash?: Address) {
     this.ownerLock = ownerLock
     this.setup = setup
     this.totalValue = totalValue
+    this.unitTypeHash = unitTypeHash
   }
 
   static fromHex(args: Hex) {
@@ -32,14 +34,42 @@ export class OrderArgs {
     const setup = parseInt(data.substring(ownerLockHexLen, ownerLockHexLen + 2), 16)
     const totalValue = beToU128(data.substring(ownerLockHexLen + 2, ownerLockHexLen + 34))
 
-    return {
-      ownerLock,
-      setup,
-      totalValue,
+    if (setup > 7) {
+      throw new OrderLockArgsException('Invalid setup')
+    }
+
+    const receiverLockFlag = (setup & 0b0000_0001) != 0
+    if (receiverLockFlag) {
+      throw new OrderLockArgsException('Invalid setup, not support receiver_lock')
+    }
+    console.log("ownerLock: ", ownerLock)
+    console.log("setup: ", setup)
+    console.log("totalValue: ", totalValue)
+
+    const unitTypeHashFlag = (setup & 0b0000_0010) != 0
+    if (unitTypeHashFlag) {
+      const unitTypeHash = data.substring(ownerLockHexLen + 34, ownerLockHexLen + 34 + 64)
+      console.log("unitTypeHash: ", unitTypeHash)
+      return {
+        ownerLock,
+        setup,
+        totalValue,
+        unitTypeHash
+      }
+    } else {
+      return {
+        ownerLock,
+        setup,
+        totalValue
+      }
     }
   }
 
   toHex(): Hex {
-    return `${serializeScript(this.ownerLock)}${u8ToHex(this.setup)}${u128ToBe(this.totalValue)}`
+    if (this.unitTypeHash != undefined) {
+      return `${serializeScript(this.ownerLock)}${u8ToHex(this.setup)}${u128ToBe(this.totalValue)}${remove0x(this.unitTypeHash)}`
+    } else {
+      return `${serializeScript(this.ownerLock)}${u8ToHex(this.setup)}${u128ToBe(this.totalValue)}`
+    }
   }
 }
