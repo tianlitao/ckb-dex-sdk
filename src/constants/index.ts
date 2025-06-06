@@ -36,14 +36,14 @@ const TestnetInfo = {
   } as CKBComponents.CellDep,
 
   DexLockScript: {
-    codeHash: '0x493510d54e815611a643af97b5ac93bfbb45ddc2aae0f2dceffaf3408b4fcfcd',
+    codeHash: '0x3c3ab92ebfcdfaf4246a961e7f7221a7f9d846eddba59af9d6a35983c6b73d65',
     hashType: 'type',
     args: '',
   } as CKBComponents.Script,
 
   DexLockDep: {
     outPoint: {
-      txHash: '0xc17040a3723df8f27c344d5e86e254f1d27e1181a5484cb3722416ef09d246ec',
+      txHash: '0x7a879924c9ebf3f6c0d697c86df0e68a07496f3a0526dff25cf6d4c6a8906132',
       index: '0x0',
     },
     depType: 'code',
@@ -56,7 +56,6 @@ const TestnetInfo = {
     },
     depType: 'depGroup',
   } as CKBComponents.CellDep,
-
 
   XUDTTypeScript: {
     codeHash: '0x25c29dc317811a6f6f3985a7a9ebc4838bd388d19d0feeecf0bcd60f6c0975bb',
@@ -123,6 +122,20 @@ const TestnetInfo = {
   BitTypeDep: {
     outPoint: {
       txHash: '0x306961e0eb04ed972c60cb89a0aed1b0ef065d96d2fc0000c62db5275e32dc6f',
+      index: '0x0',
+    },
+    depType: 'code',
+  } as CKBComponents.CellDep,
+
+  USDITypeScript: {
+    codeHash: '0xcc9dc33ef234e14bc788c43a4848556a5fb16401a04662fc55db9bb201987037',
+    hashType: 'type',
+    args: '0x71fd1985b2971a9903e4d8ed0d59e6710166985217ca0681437883837b86162f',
+  } as CKBComponents.Script,
+
+  USDITypeDep: {
+    outPoint: {
+      txHash: '0xaec423c2af7fe844b476333190096b10fc5726e6d9ac58a9b71f71ffac204fee',
       index: '0x0',
     },
     depType: 'code',
@@ -249,6 +262,20 @@ const MainnetInfo = {
     },
     depType: 'code',
   } as CKBComponents.CellDep,
+
+  USDITypeScript: {
+    codeHash: '0xbfa35a9c38a676682b65ade8f02be164d48632281477e36f8dc2f41f79e56bfc',
+    hashType: 'type',
+    args: '0xd591ebdc69626647e056e13345fd830c8b876bb06aa07ba610479eb77153ea9f',
+  } as CKBComponents.Script,
+
+  USDITypeDep: {
+    outPoint: {
+      txHash: '0xf6a5eef65101899db9709c8de1cc28f23c1bee90d857ebe176f6647ef109e20d',
+      index: '0x0',
+    },
+    depType: 'code',
+  } as CKBComponents.CellDep,
 }
 
 export const getJoyIDLockScript = (isMainnet: boolean) => (isMainnet ? MainnetInfo.JoyIDLockScript : TestnetInfo.JoyIDLockScript)
@@ -275,5 +302,8 @@ export const getMNftDep = (isMainnet: boolean) => (isMainnet ? MainnetInfo.MNftT
 export const getBitTypeScript = (isMainnet: boolean) => (isMainnet ? MainnetInfo.BitTypeScript : TestnetInfo.BitTypeScript)
 export const getBitDep = (isMainnet: boolean) => (isMainnet ? MainnetInfo.BitTypeDep : TestnetInfo.BitTypeDep)
 
+export const getAnyOneCanPayCellDep = (isMainnet: boolean) =>
+  isMainnet ? MainnetInfo.AnyOneCanPayLockDep : TestnetInfo.AnyOneCanPayLockDep
 
-export const getAnyOneCanPayCellDep = (isMainnet: boolean) => (isMainnet ? MainnetInfo.AnyOneCanPayLockDep : TestnetInfo.AnyOneCanPayLockDep)
+export const getUSDITypeScript = (isMainnet: boolean) => (isMainnet ? MainnetInfo.USDITypeScript : TestnetInfo.USDITypeScript)
+export const getUSDICellDep = (isMainnet: boolean) => (isMainnet ? MainnetInfo.USDITypeDep : TestnetInfo.USDITypeDep)

@@ -1,7 +1,7 @@
 import { CKBTransaction, ConnectResponseData } from '@joyid/ckb'
 import { Aggregator } from '../aggregator'
 import { Collector } from '../collector'
-import { Address, Hex ,Bytes} from './common'
+import { Address, Hex, Bytes } from './common'
 
 export interface JoyIDConfig {
   aggregator: Aggregator
@@ -30,6 +30,8 @@ export interface MakerParams extends BaseParams {
   listAmount?: bigint
   // The deserialized string of UDT and NFT(spore NFT, mNFT, CoTA NFT, etc.) type script
   assetType: Hex
+  // Payment in XUDT
+  unitType?: Address
 }
 
 export interface MakerResult {
@@ -45,9 +47,10 @@ export interface MakerResult {
 export interface TakerParams extends BaseParams {
   orderOutPoints: Hex[]
   buyer: Address
-  platform: Address
-  platformFee: number
-  platformCell: {txHash: Bytes, index: Bytes, capacity: bigint}
+  platform?: Address
+  platformFee?: number
+  platformCell?: { txHash: Bytes; index: Bytes; capacity: bigint }
+  unitType?: CKBComponents.Script
 }
 
 export interface TakerResult {
