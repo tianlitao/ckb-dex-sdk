@@ -1,7 +1,7 @@
 import { addressToScript, blake160, getTransactionSize, serializeScript, serializeWitnessArgs } from '@nervosnetwork/ckb-sdk-utils'
 import { blockchain } from '@ckb-lumos/base'
 import { getDexLockScript, getCotaTypeScript, getJoyIDCellDep, MAX_FEE, JOYID_ESTIMATED_WITNESS_LOCK_SIZE, CKB_UNIT } from '../constants'
-import { Hex, SubkeyUnlockReq, MakerParams, MakerResult, CKBAsset } from '../types'
+import { Hex, SubkeyUnlockReq, MakerParams, MakerResult, CKBAsset, Address } from '../types'
 import { append0x, remove0x, u128ToLe } from '../utils'
 import { AssetException, NoCotaCellException, NoLiveCellException, NFTException } from '../exceptions'
 import {
@@ -12,32 +12,44 @@ import {
   generateSporeCoBuild,
   getAssetCellDepNew,
   isUdtAsset,
-  extraLockCellCapacity
+  extraLockCellCapacity,
 } from './helper'
 import { CKBTransaction } from '@joyid/ckb'
 import { OrderArgs } from './orderArgs'
 
 // The difference between the capacity occupied by the owner lock and the seller lock and the result may be negative
-export const calculateNFTMakerListPackage = (seller: string | CKBComponents.Script): bigint => {
+export const calculateNFTMakerListPackage = (seller: string | CKBComponents.Script, unitType?: Address): bigint => {
   const sellerLock = typeof seller === 'string' ? addressToScript(seller) : seller
   const sellerLockArgsSize = remove0x(sellerLock.args).length / 2
 
   // The setup and totalValue are only used as a placeholder and does not affect the final size calculation.
-  const setup = 4
+  let setup = 4
+  // unitType is not null, undefined
+  if (unitType != null) {
+    setup = setup | 0b0000_0010
+  }
   const totalValue = BigInt(0)
-  const orderArgs = new OrderArgs(sellerLock, setup, totalValue)
+  const orderArgs = new OrderArgs(sellerLock, setup, totalValue, unitType)
   const orderArgsSize = remove0x(orderArgs.toHex()).length / 2
 
   return BigInt(orderArgsSize - sellerLockArgsSize) * CKB_UNIT
 }
 
-export const calculateUDTMakerListPackage = (seller: string | CKBComponents.Script, assetType?: Hex | CKBComponents.Script): bigint => {
+export const calculateUDTMakerListPackage = (
+  seller: string | CKBComponents.Script,
+  assetType?: Hex | CKBComponents.Script,
+  unitType?: Address,
+): bigint => {
   const sellerLock = typeof seller === 'string' ? addressToScript(seller) : seller
 
   // The setup and totalValue are only used as a placeholder and does not affect the final size calculation.
-  const setup = 4
+  let setup = 4
+  // unitType is not null, undefined
+  if (unitType != null) {
+    setup = setup | 0b0000_0010
+  }
   const totalValue = BigInt(0)
-  const orderArgs = new OrderArgs(sellerLock, setup, totalValue)
+  const orderArgs = new OrderArgs(sellerLock, setup, totalValue, unitType)
   // The CKB network does not affect the final orderLock size calculation.
   const orderLock: CKBComponents.Script = {
     ...getDexLockScript(false),
@@ -57,6 +69,7 @@ export const buildMakerTx = async ({
   assetType,
   fee,
   ckbAsset = CKBAsset.XUDT,
+  unitType,
 }: MakerParams): Promise<MakerResult> => {
   let txFee = fee ?? MAX_FEE
   const isMainnet = seller.startsWith('ckb')
@@ -69,8 +82,12 @@ export const buildMakerTx = async ({
   if (!emptyCells || emptyCells.length === 0) {
     throw new NoLiveCellException('The address has no empty cells')
   }
-  const setup = isUdtAsset(ckbAsset) ? 0 : 4
-  const orderArgs = new OrderArgs(sellerLock, setup, totalValue)
+  let setup = isUdtAsset(ckbAsset) ? 0 : 0b0000_0100
+  // unitType is not null, undefined
+  if (unitType != null) {
+    setup = setup | 0b0000_0010
+  }
+  const orderArgs = new OrderArgs(sellerLock, setup, totalValue, unitType)
   const orderLock: CKBComponents.Script = {
     ...getDexLockScript(isMainnet),
     args: orderArgs.toHex(),
@@ -238,7 +255,7 @@ export const buildMakerTx = async ({
     tx.outputs[tx.outputs.length - 1].capacity = append0x(estimatedChangeCapacity.toString(16))
   }
 
-  const listPackage = isUdtAsset(ckbAsset) ? orderCellCapacity : calculateNFTMakerListPackage(seller)
+  const listPackage = isUdtAsset(ckbAsset) ? orderCellCapacity : calculateNFTMakerListPackage(seller, unitType)
 
   return { rawTx: tx as CKBTransaction, txFee, listPackage, witnessIndex: 0 }
 }

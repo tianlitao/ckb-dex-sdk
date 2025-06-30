@@ -25,7 +25,7 @@ export const buildCancelTx = async ({
   ckbAsset = CKBAsset.XUDT,
 }: CancelParams): Promise<TakerResult> => {
   let txFee = fee ?? MAX_FEE
-  let codeHash = "0x"
+  let codeHash = '0x'
   const isMainnet = seller.startsWith('ckb')
   const sellerLock = addressToScript(seller)
 

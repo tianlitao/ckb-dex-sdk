@@ -1,6 +1,6 @@
 {
   "name": "omiga-dex",
-  "version": "0.0.42",
+  "version": "0.1.6",
   "description": "The JavaScript SDK for CKB DEX",
   "author": "duanyytop <duanyytop@gmail.com>",
   "license": "MIT",
@@ -18,6 +18,9 @@
   "scripts": {
     "build": "rm -rf lib && tsc",
     "maker": "npx esr example/maker.ts",
+    "maker-xudt": "npx esr example/maker-xudt.ts",
+    "taker": "npx esr example/taker.ts",
+    "taker-xudt": "npx esr example/taker-xudt.ts",
     "lint": "eslint src/**/*.ts --fix",
     "test": "vitest --run",
     "format": "prettier --write .",

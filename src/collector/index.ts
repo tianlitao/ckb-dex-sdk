@@ -31,8 +31,7 @@ export class Collector {
             },
           }
         : {
-            script: null,
-            output_data_len_range: ['0x0', '0x1'],
+            script_len_range: ['0x0', '0x1'],
           }
       param = {
         script: {
