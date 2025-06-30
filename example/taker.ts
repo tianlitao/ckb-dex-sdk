@@ -3,7 +3,7 @@ import { Collector } from '../src/collector'
 import { addressFromP256PrivateKey, keyFromP256Private } from '../src/utils'
 import { Aggregator } from '../src/aggregator'
 import { ConnectResponseData } from '@joyid/ckb'
-import { JoyIDConfig } from '../src/types'
+import { CKBAsset, JoyIDConfig } from '../src/types'
 import { buildTakerTx } from '../src/order'
 import { signSecp256r1Tx } from './secp256r1'
 
@@ -50,11 +50,19 @@ const taker = async () => {
     },
   ]
 
+  const dobOrderOutPoints: CKBComponents.OutPoint[] = [
+    {
+      txHash: '0x623372fb3f156aa04c43e6ccd587a59d35d987eeb9045a6349e98689a36a50dd',
+      index: '0x0',
+    },
+  ]
+
   const { rawTx, txFee, witnessIndex } = await buildTakerTx({
     collector,
     joyID,
     buyer,
-    orderOutPoints: xudtOrderOutPoints.map(serializeOutPoint),
+    orderOutPoints: dobOrderOutPoints.map(serializeOutPoint),
+    ckbAsset: CKBAsset.SPORE,
   })
 
   const key = keyFromP256Private(BUYER_MAIN_PRIVATE_KEY)

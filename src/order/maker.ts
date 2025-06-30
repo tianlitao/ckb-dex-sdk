@@ -24,6 +24,7 @@ export const calculateNFTMakerListPackage = (seller: string | CKBComponents.Scri
 
   // The setup and totalValue are only used as a placeholder and does not affect the final size calculation.
   let setup = 4
+  // unitType is not null, undefined
   if (unitType != null) {
     setup = setup | 0b0000_0010
   }
@@ -43,7 +44,8 @@ export const calculateUDTMakerListPackage = (
 
   // The setup and totalValue are only used as a placeholder and does not affect the final size calculation.
   let setup = 4
-  if (unitType != undefined) {
+  // unitType is not null, undefined
+  if (unitType != null) {
     setup = setup | 0b0000_0010
   }
   const totalValue = BigInt(0)
@@ -81,6 +83,7 @@ export const buildMakerTx = async ({
     throw new NoLiveCellException('The address has no empty cells')
   }
   let setup = isUdtAsset(ckbAsset) ? 0 : 0b0000_0100
+  // unitType is not null, undefined
   if (unitType != null) {
     setup = setup | 0b0000_0010
   }

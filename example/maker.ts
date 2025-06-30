@@ -43,6 +43,11 @@ const maker = async () => {
     hashType: 'type',
     args: '0xaafd7e7eab79726c669d7565888b194dc06bd1dbec16749a721462151e4f1762',
   }
+  const dobType: CKBComponents.Script = {
+    codeHash: '0x685a60219309029d01310311dba953d67029170ca4848a4ff638e57002130a0d',
+    hashType: 'data1',
+    args: '0x2fd94ccb4dd1048173f57a5e9656ba4d21873e9edd4ceb36b1e0afd8e1454f50',
+  }
 
   const { rawTx, listPackage, txFee } = await buildMakerTx({
     collector,
@@ -52,8 +57,8 @@ const maker = async () => {
     listAmount,
     // The price whose unit is shannon for CKB native token
     totalValue,
-    assetType: append0x(serializeScript(xudtType)),
-    ckbAsset: CKBAsset.XUDT,
+    assetType: append0x(serializeScript(dobType)),
+    ckbAsset: CKBAsset.SPORE,
   })
 
   const key = keyFromP256Private(SELLER_MAIN_PRIVATE_KEY)

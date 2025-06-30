@@ -34,7 +34,7 @@ export const calculateUdtCellCapacity = (lock: CKBComponents.Script, udtType?: C
   const lockArgsSize = remove0x(lock.args).length / 2
   const typeArgsSize = udtType ? remove0x(udtType.args).length / 2 : 32
   const cellSize = 33 + lockArgsSize + 33 + typeArgsSize + 8 + 16
-  return BigInt((cellSize + 1) * 10) * CKB_UNIT / BigInt(10)
+  return BigInt(cellSize + 1) * CKB_UNIT
 }
 
 // minimum occupied capacity and 1 ckb for transaction fee

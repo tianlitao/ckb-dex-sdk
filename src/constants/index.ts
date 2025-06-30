@@ -36,14 +36,14 @@ const TestnetInfo = {
   } as CKBComponents.CellDep,
 
   DexLockScript: {
-    codeHash: '0x3c3ab92ebfcdfaf4246a961e7f7221a7f9d846eddba59af9d6a35983c6b73d65',
+    codeHash: '0x493510d54e815611a643af97b5ac93bfbb45ddc2aae0f2dceffaf3408b4fcfcd',
     hashType: 'type',
     args: '',
   } as CKBComponents.Script,
 
   DexLockDep: {
     outPoint: {
-      txHash: '0x7a879924c9ebf3f6c0d697c86df0e68a07496f3a0526dff25cf6d4c6a8906132',
+      txHash: '0x1b39e5c3300df753b021ef7e8917076bf7111221843362926f4c7e52e3275c33',
       index: '0x0',
     },
     depType: 'code',
@@ -179,7 +179,7 @@ const MainnetInfo = {
 
   DexLockDep: {
     outPoint: {
-      txHash: '0xaab4fef7338c7108d4d2507c29122768126f9303f173db9f6ef59b9af84186b7',
+      txHash: '0x2819ccd6bcd0313d03929ef64e9d8ffb932dcd8247c432d3e9cbf0ac8d671616',
       index: '0x0',
     },
     depType: 'code',

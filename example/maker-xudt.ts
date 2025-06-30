@@ -39,11 +39,11 @@ const maker = async () => {
   }
 
   const listAmount = BigInt(500_0000_0000)
-  const totalValue = BigInt(100_000_000)
+  const totalValue = BigInt(120_000_000)
   const dobType: CKBComponents.Script = {
     codeHash: '0x685a60219309029d01310311dba953d67029170ca4848a4ff638e57002130a0d',
     hashType: 'data1',
-    args: '0x3977d116f2f449409d5e3af5620812419489e2c480ea5dfc8b61f5aa55469c34',
+    args: '0xa6a0d0a19a896962e98cb7e26fd851fb979093d24b2c4c2bd575612f98ccc6fe',
   }
   const usdiType = getUSDITypeScript(isMainnet)
 

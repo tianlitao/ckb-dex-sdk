@@ -42,31 +42,28 @@ export class OrderArgs {
     if (receiverLockFlag) {
       throw new OrderLockArgsException('Invalid setup, not support receiver_lock')
     }
-    console.log("ownerLock: ", ownerLock)
-    console.log("setup: ", setup)
-    console.log("totalValue: ", totalValue)
 
     const unitTypeHashFlag = (setup & 0b0000_0010) != 0
     if (unitTypeHashFlag) {
       const unitTypeHash = data.substring(ownerLockHexLen + 34, ownerLockHexLen + 34 + 64)
-      console.log("unitTypeHash: ", unitTypeHash)
+
       return {
         ownerLock,
         setup,
         totalValue,
         unitTypeHash
       }
-    } else {
-      return {
-        ownerLock,
-        setup,
-        totalValue
-      }
+    }
+
+    return {
+      ownerLock,
+      setup,
+      totalValue
     }
   }
 
   toHex(): Hex {
-    if (this.unitTypeHash != undefined) {
+    if (this.unitTypeHash != null) {
       return `${serializeScript(this.ownerLock)}${u8ToHex(this.setup)}${u128ToBe(this.totalValue)}${remove0x(this.unitTypeHash)}`
     } else {
       return `${serializeScript(this.ownerLock)}${u8ToHex(this.setup)}${u128ToBe(this.totalValue)}`

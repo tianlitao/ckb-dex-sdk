@@ -54,8 +54,8 @@ export const matchOrderOutputs = (orderCells: CKBComponents.LiveCell[], unitType
 
   for (const orderCell of orderCells) {
     const orderArgs = OrderArgs.fromHex(orderCell.output.lock.args)
-    if (unitType != undefined) {
-      if (orderArgs.unitTypeHash != undefined) {
+    if (unitType != null) {
+      if (orderArgs.unitTypeHash != null) {
         const capacity = calculateUdtCellCapacity(orderArgs.ownerLock, unitType!)
         sumSellerCapacity += capacity
         const output: CKBComponents.CellOutput = {
@@ -69,7 +69,7 @@ export const matchOrderOutputs = (orderCells: CKBComponents.LiveCell[], unitType
         throw new AssetException('The order must be payed by ckb')
       }
     } else {
-      if (orderArgs.unitTypeHash != undefined) {
+      if (orderArgs.unitTypeHash != null) {
         throw new AssetException('The order must be payed by xudt')
       }
       sumSellerCapacity += orderArgs.totalValue
@@ -95,7 +95,7 @@ export const matchNftOrderCells = (orderCells: CKBComponents.LiveCell[], buyerLo
 
   for (const orderCell of orderCells) {
     const orderArgs = OrderArgs.fromHex(orderCell.output.lock.args)
-    if (unitType != undefined) {
+    if (unitType != null) {
       const capacity = calculateUdtCellCapacity(orderArgs.ownerLock, unitType!)
       dexOutputsCapacity += capacity
       const output: CKBComponents.CellOutput = {
@@ -229,7 +229,7 @@ export const buildTakerTx = async ({
 
     let inputXudtCapacity = BigInt(0)
     let outputXudtCapacity = BigInt(0)
-    if (unitType != undefined) {
+    if (unitType != null) {
       const xudtCells = await collector.getCells({
         lock: buyerLock,
         type: unitType,
@@ -243,7 +243,7 @@ export const buildTakerTx = async ({
 
       for (const orderCell of orderCells) {
         const orderArgs = OrderArgs.fromHex(orderCell.output.lock.args)
-        if (orderArgs.unitTypeHash != undefined) {
+        if (orderArgs.unitTypeHash != null) {
           totalValue += orderArgs.totalValue
         } else {
           throw new AssetException('The order must be payed by xudt')
@@ -298,7 +298,7 @@ export const buildTakerTx = async ({
 
     let inputXudtCapacity = BigInt(0)
     let outputXudtCapacity = BigInt(0)
-    if (unitType != undefined) {
+    if (unitType != null) {
       const xudtCells = await collector.getCells({
         lock: buyerLock,
         type: unitType!,
@@ -312,7 +312,7 @@ export const buildTakerTx = async ({
 
       for (const orderCell of orderCells) {
         const orderArgs = OrderArgs.fromHex(orderCell.output.lock.args)
-        if (orderArgs.unitTypeHash != undefined) {
+        if (orderArgs.unitTypeHash != null) {
           totalValue += orderArgs.totalValue
         } else {
           throw new AssetException('The order must be payed by xudt')
@@ -322,7 +322,7 @@ export const buildTakerTx = async ({
       inputs.push(...xudtInputs)
       inputXudtCapacity = sumCapacity
 
-      const chagneXudt = sumAmount - totalValue
+      const changeXudt = sumAmount - totalValue
       const capacity = calculateUdtCellCapacity(buyerLock, unitType!)
       const changeXudtOutput: CKBComponents.CellOutput = {
         lock: buyerLock,
@@ -330,7 +330,7 @@ export const buildTakerTx = async ({
         type: unitType!
       }
       outputs.push(changeXudtOutput)
-      outputsData.push(append0x(u128ToLe(chagneXudt)))
+      outputsData.push(append0x(u128ToLe(changeXudt)))
       outputXudtCapacity = capacity
     }
 
@@ -339,11 +339,12 @@ export const buildTakerTx = async ({
       lock: buyerLock,
       capacity: append0x(changeCapacity.toString(16)),
     }
+
     outputs.push(changeOutput)
     outputsData.push('0x')
   }
 
-  if (unitType != undefined) {
+  if (unitType != null) {
     cellDeps.push(getUSDICellDep(isMainnet))
   }
   cellDeps.push(getAssetCellDepNew(codeHash, isMainnet))

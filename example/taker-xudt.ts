@@ -38,7 +38,7 @@ const taker = async () => {
 
   const xudtOrderOutPoints: CKBComponents.OutPoint[] = [
     {
-      txHash: '0xde752fb3318d1079542cf7fa33a3f28c58f30d142cfca9db6e10273df1ef3c8a',
+      txHash: '0xa4c4ccd8adb9fd9573f2d81d8a309c47298456da3d065c977aec78fd8c77a128',
       index: '0x0',
     },
   ]
