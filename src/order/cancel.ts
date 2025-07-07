@@ -114,7 +114,13 @@ export const buildCancelTx = async ({
   const witnesses = inputs.map((_, index) => (index === orderInputs.length ? serializeWitnessArgs(emptyWitness) : '0x'))
   if (ckbAsset === CKBAsset.SPORE) {
     witnesses.push(sporeCoBuild)
+  } else if (ckbAsset === CKBAsset.MNFT) {
+    // MNFT must not be held and transferred by anyone-can-pay lock
+    orderInputs.forEach((_, index) => {
+      witnesses[index] = serializeWitnessArgs({ lock: '0x00', inputType: '', outputType: '' })
+    })
   }
+
   if (joyID && joyID.connectData.keyType === 'sub_key') {
     const pubkeyHash = append0x(blake160(append0x(joyID.connectData.pubkey), 'hex'))
     const req: SubkeyUnlockReq = {
