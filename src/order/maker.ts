@@ -188,7 +188,7 @@ export const buildMakerTx = async ({
     outputs.push(orderOutput)
     outputsData.push(nftCell.outputData)
 
-    changeCapacity = emptyInputsCapacity - orderNeedCapacity - txFee
+    changeCapacity = emptyInputsCapacity + nftInputCapacity - orderCellCapacity - txFee
     outputs.push({
       lock: sellerLock,
       capacity: append0x(changeCapacity.toString(16)),
