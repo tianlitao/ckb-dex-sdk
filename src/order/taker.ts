@@ -25,7 +25,6 @@ import {
 } from './helper'
 import { OrderArgs } from './orderArgs'
 import { CKBTransaction } from '@joyid/ckb'
-import { calculateNFTMakerListPackage } from './maker'
 import { ANYONE_CAN_PAY_MAINNET } from '@nervosnetwork/ckb-sdk-utils/lib/systemScripts'
 
 export const setPlatformFeeOutputs = (feeLock: CKBComponents.Script, sumSellerCapacity: bigint, platformFee: number, capacity: bigint) => {
@@ -95,6 +94,8 @@ export const matchNftOrderCells = (orderCells: CKBComponents.LiveCell[], buyerLo
 
   for (const orderCell of orderCells) {
     const orderArgs = OrderArgs.fromHex(orderCell.output.lock.args)
+    const buyerNftCapacity = calculateNFTCellCapacity(buyerLock, orderCell)
+
     if (unitType != null) {
       const capacity = calculateUdtCellCapacity(orderArgs.ownerLock, unitType!)
       dexOutputsCapacity += capacity
@@ -106,8 +107,6 @@ export const matchNftOrderCells = (orderCells: CKBComponents.LiveCell[], buyerLo
 
       dexOutputs.push(output)
       dexOutputsData.push(append0x(u128ToLe(orderArgs.totalValue)))
-  
-      makerNetworkFee += calculateNFTMakerListPackage(orderArgs.ownerLock, orderArgs.unitTypeHash!)
     } else {
       dexOutputsCapacity += orderArgs.totalValue
       const output: CKBComponents.CellOutput = {
@@ -116,10 +115,12 @@ export const matchNftOrderCells = (orderCells: CKBComponents.LiveCell[], buyerLo
       }
       dexOutputs.push(output)
       dexOutputsData.push('0x')
-  
-      makerNetworkFee += calculateNFTMakerListPackage(orderArgs.ownerLock)
     }
-    const buyerNftCapacity = calculateNFTCellCapacity(buyerLock, orderCell)
+
+    // Use the order cell's real on-chain capacity minus the buyer's actual new cell capacity,
+    // instead of a theoretical estimate based on the seller lock args length.
+    makerNetworkFee += BigInt(append0x(orderCell.output.capacity)) - buyerNftCapacity
+
     buyerOutputs.push({
       lock: buyerLock,
       type: orderCell.output.type,
