@@ -43,7 +43,7 @@ const TestnetInfo = {
 
   DexLockDep: {
     outPoint: {
-      txHash: '0x1b39e5c3300df753b021ef7e8917076bf7111221843362926f4c7e52e3275c33',
+      txHash: '0x1468df454aa11876dd89f8ef95020b963325781c02e72aca78ec80dd9eb76f1b',
       index: '0x0',
     },
     depType: 'code',
@@ -179,7 +179,7 @@ const MainnetInfo = {
 
   DexLockDep: {
     outPoint: {
-      txHash: '0x2819ccd6bcd0313d03929ef64e9d8ffb932dcd8247c432d3e9cbf0ac8d671616',
+      txHash: '0x36ad4eb856e744648e3f1faf82095fef1140d26dbb85a87141e81a2b1a01847e',
       index: '0x0',
     },
     depType: 'code',
