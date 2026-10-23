@@ -1,5 +1,5 @@
-import { addressToScript, blake160, getTransactionSize, serializeScript, serializeWitnessArgs } from '@nervosnetwork/ckb-sdk-utils'
-import { getCotaTypeScript, getJoyIDCellDep, getDexCellDep, MAX_FEE, JOYID_ESTIMATED_WITNESS_LOCK_SIZE } from '../constants'
+import { ccc } from '@ckb-ccc/core'
+import { getCotaTypeScript, getJoyIDCellDeps, getDexCellDep, MAX_FEE, JOYID_ESTIMATED_WITNESS_LOCK_SIZE } from '../constants'
 import { CKBAsset, CancelParams, Hex, SubkeyUnlockReq, TakerResult } from '../types'
 import { append0x } from '../utils'
 import { AssetException, NoCotaCellException, NoLiveCellException } from '../exceptions'
@@ -7,13 +7,12 @@ import {
   calculateEmptyCellMinCapacity,
   calculateNFTCellCapacity,
   calculateTransactionFee,
-  cleanUpUdtOutputs as cleanUpUdtOutputs,
+  cleanUpUdtOutputs,
   deserializeOutPoints,
   generateSporeCoBuild,
   getAssetCellDepNew,
   isUdtAsset,
 } from './helper'
-import { CKBTransaction } from '@joyid/ckb'
 import { OrderArgs } from './orderArgs'
 
 export const buildCancelTx = async ({
@@ -27,53 +26,50 @@ export const buildCancelTx = async ({
   let txFee = fee ?? MAX_FEE
   let codeHash = '0x'
   const isMainnet = seller.startsWith('ckb')
-  const sellerLock = addressToScript(seller)
+  const sellerLock = await collector.getAddressLock(seller)
 
-  const emptyCells = await collector.getCells({
-    lock: sellerLock,
-  })
+  const emptyCells = await collector.getCells({ lock: sellerLock })
   if (!emptyCells || emptyCells.length === 0) {
     throw new NoLiveCellException('The address has no empty cells')
   }
 
   const outPoints = deserializeOutPoints(orderOutPoints)
-
   let orderInputsCapacity = BigInt(0)
-  // Fetch udt order cells with outPoints
-  const orderCells: CKBComponents.LiveCell[] = []
-  for await (const outPoint of outPoints) {
+  const orderCells: ccc.Cell[] = []
+
+  for (const outPoint of outPoints) {
     const cell = await collector.getLiveCell(outPoint)
     if (!cell) {
       throw new AssetException('The asset cell specified by the out point has been spent')
     }
-    const orderArgs = OrderArgs.fromHex(cell.output.lock.args)
-    if (serializeScript(orderArgs.ownerLock) !== serializeScript(sellerLock)) {
+    const orderArgs = OrderArgs.fromHex(cell.cellOutput.lock.args)
+    if (!orderArgs.ownerLock.eq(sellerLock)) {
       throw new AssetException('The asset cell does not belong to the seller address')
     }
-    if (!cell.output.type || !cell.data) {
+    if (!cell.cellOutput.type) {
       throw new AssetException('The asset cell specified by the out point must have type script')
     }
-    codeHash = cell.output.type!.codeHash
-    orderInputsCapacity += BigInt(cell.output.capacity)
+    codeHash = cell.cellOutput.type.codeHash
+    orderInputsCapacity += cell.cellOutput.capacity
     orderCells.push(cell)
   }
 
-  const orderInputs: CKBComponents.CellInput[] = outPoints.map(outPoint => ({
-    previousOutput: outPoint,
-    since: '0x0',
-  }))
-
-  let inputs: CKBComponents.CellInput[] = []
-  let outputs: CKBComponents.CellOutput[] = []
+  const orderInputs = outPoints.map(outPoint => ccc.CellInput.from({ previousOutput: outPoint, since: 0 }))
+  let outputs: ccc.CellOutput[] = []
   let outputsData: Hex[] = []
-  let cellDeps: CKBComponents.CellDep[] = [getDexCellDep(isMainnet)]
+  let cellDeps: ccc.CellDepLike[] = [getDexCellDep(isMainnet)]
   let changeCapacity = BigInt(0)
   let sporeCoBuild = '0x'
 
   const minCellCapacity = calculateEmptyCellMinCapacity(sellerLock)
-  const errMsg = `Insufficient CKB available balance to pay transaction fee`
-  const { inputs: emptyInputs, capacity: inputsCapacity } = collector.collectInputs(emptyCells, minCellCapacity, txFee, BigInt(0), errMsg)
-  inputs = [...orderInputs, ...emptyInputs]
+  const { inputs: emptyInputs, capacity: inputsCapacity } = collector.collectInputs(
+    emptyCells,
+    minCellCapacity,
+    txFee,
+    BigInt(0),
+    'Insufficient CKB available balance to pay transaction fee',
+  )
+  const inputs = [...orderInputs, ...emptyInputs]
 
   if (isUdtAsset(ckbAsset)) {
     const { udtOutputs, udtOutputsData, sumUdtCapacity } = cleanUpUdtOutputs(orderCells, sellerLock)
@@ -84,13 +80,18 @@ export const buildCancelTx = async ({
     let sumNftCapacity = BigInt(0)
     for (const orderCell of orderCells) {
       const minNFTCapacity = calculateNFTCellCapacity(sellerLock, orderCell)
-      outputs.push({
-        ...orderCell.output,
-        lock: sellerLock,
-        capacity: append0x(minNFTCapacity.toString(16)),
-      })
+      outputs.push(
+        ccc.CellOutput.from(
+          {
+            lock: sellerLock,
+            type: orderCell.cellOutput.type,
+            capacity: minNFTCapacity,
+          },
+          orderCell.outputData,
+        ),
+      )
       sumNftCapacity += minNFTCapacity
-      outputsData.push(orderCell.data?.content!)
+      outputsData.push(orderCell.outputData)
     }
 
     if (ckbAsset === CKBAsset.SPORE) {
@@ -98,73 +99,64 @@ export const buildCancelTx = async ({
     }
     changeCapacity = inputsCapacity + orderInputsCapacity - sumNftCapacity - txFee
   }
-  const changeOutput: CKBComponents.CellOutput = {
-    lock: sellerLock,
-    capacity: append0x(changeCapacity.toString(16)),
-  }
-  outputs.push(changeOutput)
+
+  outputs.push(ccc.CellOutput.from({ lock: sellerLock, capacity: changeCapacity }))
   outputsData.push('0x')
 
   cellDeps.push(getAssetCellDepNew(codeHash, isMainnet))
   if (joyID) {
-    cellDeps.push(getJoyIDCellDep(isMainnet))
+    cellDeps.push(...(await getJoyIDCellDeps(collector.getClient())))
   }
 
-  const emptyWitness = { lock: '', inputType: '', outputType: '' }
-  const witnesses = inputs.map((_, index) => (index === orderInputs.length ? serializeWitnessArgs(emptyWitness) : '0x'))
+  const emptyWitness = ccc.hexFrom(ccc.WitnessArgs.from({}).toBytes())
+  const witnesses: Hex[] = inputs.map((_, index) => (index === orderInputs.length ? emptyWitness : '0x'))
   if (ckbAsset === CKBAsset.SPORE) {
     witnesses.push(sporeCoBuild)
   } else if (ckbAsset === CKBAsset.MNFT) {
-    // MNFT must not be held and transferred by anyone-can-pay lock
     orderInputs.forEach((_, index) => {
-      witnesses[index] = serializeWitnessArgs({ lock: '0x00', inputType: '', outputType: '' })
+      witnesses[index] = ccc.hexFrom(ccc.WitnessArgs.from({ lock: '0x00' }).toBytes())
     })
   }
 
   if (joyID && joyID.connectData.keyType === 'sub_key') {
-    const pubkeyHash = append0x(blake160(append0x(joyID.connectData.pubkey), 'hex'))
+    const pubkeyHash = ccc.hashCkbShort(joyID.connectData.pubkey)
     const req: SubkeyUnlockReq = {
-      lockScript: serializeScript(sellerLock),
+      lockScript: ccc.hexFrom(sellerLock.toBytes()),
       pubkeyHash,
-      algIndex: 1, // secp256r1
+      algIndex: 1,
     }
     const { unlockEntry } = await joyID.aggregator.generateSubkeyUnlockSmt(req)
-    const emptyWitness = {
-      lock: '',
-      inputType: '',
-      outputType: append0x(unlockEntry),
-    }
-    witnesses[orderInputs.length] = serializeWitnessArgs(emptyWitness)
+    witnesses[orderInputs.length] = ccc.hexFrom(
+      ccc.WitnessArgs.from({
+        outputType: append0x(unlockEntry),
+      }).toBytes(),
+    )
 
     const cotaType = getCotaTypeScript(isMainnet)
     const cotaCells = await collector.getCells({ lock: sellerLock, type: cotaType })
     if (!cotaCells || cotaCells.length === 0) {
       throw new NoCotaCellException("Cota cell doesn't exist")
     }
-    const cotaCell = cotaCells[0]
-    const cotaCellDep: CKBComponents.CellDep = {
-      outPoint: cotaCell.outPoint,
-      depType: 'code',
-    }
+    const cotaCellDep = ccc.CellDep.from({ outPoint: cotaCells[0].outPoint, depType: 'code' })
     cellDeps = [cotaCellDep, ...cellDeps]
   }
-  const tx: CKBComponents.RawTransaction = {
-    version: '0x0',
+
+  const tx = ccc.Transaction.from({
+    version: 0,
     cellDeps,
     headerDeps: [],
     inputs,
     outputs,
     outputsData,
     witnesses,
-  }
+  })
 
   if (txFee === MAX_FEE) {
-    const txSize = getTransactionSize(tx) + (joyID ? JOYID_ESTIMATED_WITNESS_LOCK_SIZE : 0)
+    const txSize = tx.toBytes().length + 4 + (joyID ? JOYID_ESTIMATED_WITNESS_LOCK_SIZE : 0)
     const estimatedTxFee = calculateTransactionFee(txSize)
     txFee = estimatedTxFee
-    const estimatedChangeCapacity = changeCapacity + (MAX_FEE - estimatedTxFee)
-    tx.outputs[tx.outputs.length - 1].capacity = append0x(estimatedChangeCapacity.toString(16))
+    tx.outputs[tx.outputs.length - 1].capacity += MAX_FEE - estimatedTxFee
   }
 
-  return { rawTx: tx as CKBTransaction, txFee, witnessIndex: orderInputs.length }
+  return { rawTx: tx, txFee, witnessIndex: orderInputs.length }
 }

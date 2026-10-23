@@ -1,17 +1,16 @@
-import { blockchain } from '@ckb-lumos/base'
+import { ccc } from '@ckb-ccc/core'
 import { OrderLockArgsException } from '../exceptions'
 import { Hex, Address } from '../types'
 import { append0x, beToU128, leToU32, remove0x, u128ToBe, u8ToHex } from '../utils'
-import { serializeScript } from '@nervosnetwork/ckb-sdk-utils'
 
 export class OrderArgs {
-  public ownerLock: CKBComponents.Script
+  public ownerLock: ccc.Script
   public setup: number
   public totalValue: bigint
   public unitTypeHash?: Address
 
-  constructor(ownerLock: CKBComponents.Script, setup: number, totalValue: bigint, unitTypeHash?: Address) {
-    this.ownerLock = ownerLock
+  constructor(ownerLock: ccc.ScriptLike, setup: number, totalValue: bigint, unitTypeHash?: Address) {
+    this.ownerLock = ccc.Script.from(ownerLock)
     this.setup = setup
     this.totalValue = totalValue
     this.unitTypeHash = unitTypeHash
@@ -25,7 +24,7 @@ export class OrderArgs {
     }
 
     const ownerLockHexLen = leToU32(data.substring(0, 8)) * 2
-    const ownerLock = blockchain.Script.unpack(append0x(data.substring(0, ownerLockHexLen))) as CKBComponents.Script
+    const ownerLock = ccc.Script.fromBytes(append0x(data.substring(0, ownerLockHexLen)))
 
     if (data.length < ownerLockHexLen + 34) {
       throw new OrderLockArgsException('The length of dex lock args is invalid')
@@ -46,27 +45,30 @@ export class OrderArgs {
     const unitTypeHashFlag = (setup & 0b0000_0010) != 0
     if (unitTypeHashFlag) {
       const unitTypeHash = data.substring(ownerLockHexLen + 34, ownerLockHexLen + 34 + 64)
+      if (unitTypeHash.length !== 64) {
+        throw new OrderLockArgsException('The unit type hash of dex lock args is invalid')
+      }
 
       return {
         ownerLock,
         setup,
         totalValue,
-        unitTypeHash
+        unitTypeHash,
       }
     }
 
     return {
       ownerLock,
       setup,
-      totalValue
+      totalValue,
     }
   }
 
   toHex(): Hex {
+    const ownerLockHex = ccc.hexFrom(this.ownerLock.toBytes())
     if (this.unitTypeHash != null) {
-      return `${serializeScript(this.ownerLock)}${u8ToHex(this.setup)}${u128ToBe(this.totalValue)}${remove0x(this.unitTypeHash)}`
-    } else {
-      return `${serializeScript(this.ownerLock)}${u8ToHex(this.setup)}${u128ToBe(this.totalValue)}`
+      return `${ownerLockHex}${u8ToHex(this.setup)}${u128ToBe(this.totalValue)}${remove0x(this.unitTypeHash)}`
     }
+    return `${ownerLockHex}${u8ToHex(this.setup)}${u128ToBe(this.totalValue)}`
   }
 }

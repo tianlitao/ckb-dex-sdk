@@ -1,172 +1,162 @@
-import axios from 'axios'
-import CKB from '@nervosnetwork/ckb-sdk-core'
-import { toCamelcase } from '../utils/case-parser'
-import { IndexerCell, CollectResult, IndexerCapacity, CollectUdtResult as CollectUdtResult } from '../types/collector'
+import { ccc } from '@ckb-ccc/core'
+import { IndexerCell, CollectResult, IndexerCapacity, CollectUdtResult } from '../types/collector'
 import { MIN_CAPACITY } from '../constants'
 import { CapacityNotEnoughException, IndexerException, UdtAmountNotEnoughException } from '../exceptions'
-import { leToU128 } from '../utils'
+
+export type CollectorNetwork = 'mainnet' | 'testnet'
+
+export interface CollectorOptions {
+  ckbNodeUrl?: string
+  ckbIndexerUrl?: string
+  network?: CollectorNetwork
+  client?: ccc.Client
+}
+
+const normalizePublicUrl = (url: string): string => {
+  return url.replace(/\/$/, '').replace(/\/(rpc|indexer)$/, '') + '/'
+}
 
 export class Collector {
-  private ckbNodeUrl: string
-  private ckbIndexerUrl: string
+  private ckbNodeUrl?: string
+  private ckbIndexerUrl?: string
+  private readonly clientInstance: ccc.Client
+  private readonly clientOwner?: { dispose: () => Promise<void> }
 
-  constructor({ ckbNodeUrl, ckbIndexerUrl }: { ckbNodeUrl: string; ckbIndexerUrl: string }) {
+  constructor({ ckbNodeUrl, ckbIndexerUrl, network, client }: CollectorOptions) {
     this.ckbNodeUrl = ckbNodeUrl
     this.ckbIndexerUrl = ckbIndexerUrl
+
+    if (client) {
+      this.clientInstance = client
+      return
+    }
+
+    const sourceUrl = ckbNodeUrl ?? ckbIndexerUrl
+    if (!sourceUrl) {
+      throw new Error('Collector requires ckbNodeUrl, ckbIndexerUrl, or a CCC client')
+    }
+
+    const urls: [string, ...string[]] = [normalizePublicUrl(sourceUrl)]
+    const detectedNetwork = network ?? (urls[0].toLowerCase().includes('mainnet') ? 'mainnet' : 'testnet')
+    // Public endpoints can be slow on indexer queries (e.g. known-script dep resolution);
+    // raise the per-request timeout from CCC's 30s default.
+    const owner =
+      detectedNetwork === 'mainnet'
+        ? ccc.ClientPublicMainnet.open({ urls, timeout: 60_000 })
+        : ccc.ClientPublicTestnet.open({ urls, timeout: 60_000 })
+
+    this.clientInstance = owner.value
+    this.clientOwner = owner
   }
 
-  getCkb() {
-    return new CKB(this.ckbNodeUrl)
+  getClient(): ccc.Client {
+    return this.clientInstance
   }
 
-  async getCells({ lock, type }: { lock?: CKBComponents.Script; type?: CKBComponents.Script }): Promise<IndexerCell[] | undefined> {
-    let param: any
-    if (lock) {
-      const filter = type
-        ? {
-            script: {
-              code_hash: type.codeHash,
-              hash_type: type.hashType,
-              args: type.args,
-            },
-          }
-        : {
-            script_len_range: ['0x0', '0x1'],
-          }
-      param = {
-        script: {
-          code_hash: lock.codeHash,
-          hash_type: lock.hashType,
-          args: lock.args,
-        },
-        script_type: 'lock',
-        script_search_mode: 'exact',
-        filter,
-      }
-    } else if (type) {
-      param = {
-        script: {
-          code_hash: type.codeHash,
-          hash_type: type.hashType,
-          args: type.args,
-        },
-        script_search_mode: 'exact',
-        script_type: 'type',
-      }
+  /**
+   * @deprecated Use getClient() and CCC APIs instead.
+   */
+  getCkb(): ccc.Client {
+    return this.getClient()
+  }
+
+  async getAddressLock(address: string): Promise<ccc.Script> {
+    return (await ccc.Address.fromString(address, this.getClient())).script
+  }
+
+  async getCells({ lock, type }: { lock?: ccc.ScriptLike; type?: ccc.ScriptLike }): Promise<IndexerCell[] | undefined> {
+    if (!lock && !type) {
+      throw new IndexerException('Either lock or type must be provided')
     }
-    let payload = {
-      id: 1,
-      jsonrpc: '2.0',
-      method: 'get_cells',
-      params: [param, 'asc', '0x3E8'],
+
+    const cells: ccc.Cell[] = []
+    const searchKey = lock
+      ? {
+          script: ccc.Script.from(lock),
+          scriptType: 'lock' as const,
+          scriptSearchMode: 'exact' as const,
+          filter: type
+            ? { script: ccc.Script.from(type) }
+            : {
+                scriptLenRange: [0, 1] as [number, number],
+                outputDataLenRange: [0, 1] as [number, number],
+              },
+          withData: true,
+        }
+      : {
+          script: ccc.Script.from(type!),
+          scriptType: 'type' as const,
+          scriptSearchMode: 'exact' as const,
+          withData: true,
+        }
+
+    for await (const cell of this.clientInstance.findCells(searchKey, 'asc', 1000)) {
+      cells.push(cell)
     }
-    const body = JSON.stringify(payload, null, '  ')
-    let response = (
-      await axios({
-        method: 'post',
-        url: this.ckbIndexerUrl,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        timeout: 20000,
-        data: body,
+
+    return cells.length === 0 ? undefined : cells
+  }
+
+  async getCapacity(lock: ccc.ScriptLike): Promise<IndexerCapacity | undefined> {
+    try {
+      const capacity = await this.clientInstance.getCellsCapacity({
+        script: ccc.Script.from(lock),
+        scriptType: 'lock',
+        scriptSearchMode: 'exact',
       })
-    ).data
-    if (response.error) {
-      console.error(response.error)
-      throw new IndexerException('Get cells error')
-    } else {
-      return toCamelcase(response.result.objects)
-    }
-  }
-
-  async getCapacity(lock: CKBComponents.Script): Promise<IndexerCapacity | undefined> {
-    let payload = {
-      id: 1,
-      jsonrpc: '2.0',
-      method: 'get_cells_capacity',
-      params: [
-        {
-          script: {
-            code_hash: lock.codeHash,
-            hash_type: lock.hashType,
-            args: lock.args,
-          },
-          script_type: 'lock',
-        },
-      ],
-    }
-    const body = JSON.stringify(payload, null, '  ')
-    let response = (
-      await axios({
-        method: 'post',
-        url: this.ckbIndexerUrl,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        timeout: 20000,
-        data: body,
-      })
-    ).data
-    if (response.error) {
-      console.error(response.error)
+      return { capacity }
+    } catch (error) {
+      console.error(error)
       throw new IndexerException('Get cells capacity error')
-    } else {
-      return toCamelcase(response.result)
     }
   }
 
   collectInputs(liveCells: IndexerCell[], needCapacity: bigint, fee: bigint, minCapacity?: bigint, errMsg?: string): CollectResult {
     const changeCapacity = minCapacity ?? MIN_CAPACITY
-    let inputs: CKBComponents.CellInput[] = []
+    const inputs: ccc.CellInput[] = []
     let sum = BigInt(0)
-    for (let cell of liveCells) {
-      inputs.push({
-        previousOutput: {
-          txHash: cell.outPoint.txHash,
-          index: cell.outPoint.index,
-        },
-        since: '0x0',
-      })
-      sum = sum + BigInt(cell.output.capacity)
+
+    for (const cell of liveCells) {
+      inputs.push(ccc.CellInput.from(cell))
+      sum += cell.cellOutput.capacity
       if (sum >= needCapacity + changeCapacity + fee) {
         break
       }
     }
+
     if (sum < needCapacity + changeCapacity + fee) {
-      const message = errMsg ?? 'Insufficient free CKB balance'
-      throw new CapacityNotEnoughException(message)
+      throw new CapacityNotEnoughException(errMsg ?? 'Insufficient free CKB balance')
     }
+
     return { inputs, capacity: sum }
   }
 
   collectUdtInputs(liveCells: IndexerCell[], needAmount: bigint): CollectUdtResult {
-    let inputs: CKBComponents.CellInput[] = []
+    const inputs: ccc.CellInput[] = []
     let sumCapacity = BigInt(0)
     let sumAmount = BigInt(0)
-    for (let cell of liveCells) {
-      inputs.push({
-        previousOutput: {
-          txHash: cell.outPoint.txHash,
-          index: cell.outPoint.index,
-        },
-        since: '0x0',
-      })
-      sumCapacity = sumCapacity + BigInt(cell.output.capacity)
-      sumAmount += leToU128(cell.outputData)
+
+    for (const cell of liveCells) {
+      inputs.push(ccc.CellInput.from(cell))
+      sumCapacity += cell.cellOutput.capacity
+      sumAmount += ccc.udtBalanceFrom(cell.outputData)
       if (sumAmount >= needAmount) {
         break
       }
     }
+
     if (sumAmount < needAmount) {
       throw new UdtAmountNotEnoughException('Insufficient UDT balance')
     }
+
     return { inputs, capacity: sumCapacity, amount: sumAmount }
   }
 
-  async getLiveCell(outPoint: CKBComponents.OutPoint): Promise<CKBComponents.LiveCell> {
-    const ckb = new CKB(this.ckbNodeUrl)
-    const { cell } = await ckb.rpc.getLiveCell(outPoint, true)
-    return cell
+  async getLiveCell(outPoint: ccc.OutPointLike | ccc.OutPoint): Promise<ccc.Cell | undefined> {
+    return this.clientInstance.getCellLive(ccc.OutPoint.from(outPoint), true)
+  }
+
+  async close(): Promise<void> {
+    await this.clientOwner?.dispose()
   }
 }

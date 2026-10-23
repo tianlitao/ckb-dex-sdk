@@ -1,37 +1,101 @@
 # CKB DEX SDK
 
-[![CI](https://github.com/nervina-labs/ckb-dex-sdk/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/nervina-labs/ckb-dex-sdk/actions)
-[![NPM](https://img.shields.io/npm/v/@nervina-labs/ckb-dex/latest.svg)](https://www.npmjs.com/package/@nervina-labs/ckb-dex)
+JavaScript/TypeScript SDK for building CKB DEX maker, taker, and cancel transactions.
 
-CKB DEX SDK is a comprehensive web development kit, which helps developers interact with the CKB DEX contract in JavaScript/TypeScript environments.
+The SDK now uses [CCC](https://github.com/ckb-devrel/ccc) for all CKB primitives: addresses, scripts, cells, transactions, RPC/indexer access, witness encoding, and transaction hashing. It no longer imports `ckb-lumos`, `ckb-sdk-js`, or `spore-sdk` directly.
 
-The SDK provides methods for making orders, taking orders, and canceling orders. Developers can use common lock scripts, such as official secp256k1/blake160 lock, JoyID lock, etc., to interact with the CKB DEX contract.
+## What changed
 
-You can use the DEX to swap fungible tokens([SUDT](https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0025-simple-udt/0025-simple-udt.md), [XUDT](https://talk.nervos.org/t/rfc-extensible-udt/5337), etc.) and non-fungible tokens([Spore](https://docs.spore.pro/), [mNFT](https://talk.nervos.org/t/rfc-multi-purpose-nft-draft-spec/5434), etc.) with CKB native asset and JoyID lock is recommended to hold and swap CKB assets.
-
-You can build the maker transactions to transfer FT or NFT assets to DEX lock script whose args contains owner address, price(based on CKB native asset), setup, etc. Anyone can build a taker transaction, as long as the price required in the DEX lock args is met. You can cancel the maker transactions at any time before the taker transactions are executed.
+- `@ckb-ccc/core` replaces `@ckb-lumos/base` and the `@nervosnetwork/ckb-sdk-*` packages.
+- `@ckb-ccc/spore/advanced` replaces the Spore SDK CoBuild helpers.
+- `rawTx` returned by `buildMakerTx`, `buildTakerTx`, `buildCancelTx`, and `buildMultiNftsMakerTx` is a `ccc.Transaction`.
+- `Collector` owns a `ccc.Client`; use `collector.getClient()` for RPC/indexer calls.
+- `Collector.getCkb()` remains as a deprecated alias for `collector.getClient()`.
+- Address-string helpers are asynchronous because CCC resolves addresses through a network-aware `ccc.Client`.
+- JoyID cell deps are resolved on chain through CCC's known-script registry (`getJoyIDCellDeps(client)`); the previously pinned testnet/mainnet outPoints are no longer live. The CCC client used by `Collector` raises the per-request timeout to 60s because public endpoints can be slow on indexer queries.
 
 ## Installation
 
-```
-$ npm i @nervina-labs/ckb-dex
+```bash
+npm i @ckb-ccc/core @ckb-ccc/spore
 # or
-$ yarn add @nervina-labs/ckb-dex
-# or
-$ pnpm add @nervina-labs/ckb-dex
+pnpm add @ckb-ccc/core @ckb-ccc/spore
 ```
 
-## Development
+If this repository is published as `omiga-dex`, install that package as well:
 
-### Connect the JoyID Wallet
+```bash
+npm i omiga-dex
+```
 
-You can [connect JoyID wallet](https://docs.joyid.dev/guide/ckb/connect) using [@joyid/ckb](https://www.npmjs.com/package/@joyid/ckb) SDK `connect` function and then you can get the ConnectResponseData to build maker and taker transactions later.
+## Client configuration
 
-### Build and Sign transactions
+CCC's JSON-RPC client expects an endpoint that exposes both CKB RPC and the indexer. For the public network this is the root endpoint:
 
-You can use [`buildMakerTx`](./src/order/maker.ts), [`buildCancelTx`](./src/order/cancel.ts) and [`buildTakerTx`](./src/order/taker.ts) methods to place, cancel and take orders with the ConnectResponseData and the methods will generate CKB raw transaction for you to be signed later.
+```typescript
+import { Collector } from 'omiga-dex'
 
-You must set the asset type(CKBAsset) when calling `buildXXXTx` methods and the CKBAsset is defined as follows:
+const collector = new Collector({
+  ckbNodeUrl: 'https://testnet.ckb.dev/',
+  network: 'testnet',
+})
+
+const client = collector.getClient()
+// client.sendTransaction(...)
+// client.findCellsByLock(...)
+```
+
+For a custom deployment, pass a fully configured CCC client instead of splitting URLs:
+
+```typescript
+import { ccc } from '@ckb-ccc/core'
+import { Collector } from 'omiga-dex'
+
+const client = new ccc.ClientPublicTestnet({
+  url: 'https://my-ckb-service.example/',
+})
+
+const collector = new Collector({ client })
+```
+
+`ckbIndexerUrl` is still accepted for source compatibility, but CCC uses the endpoint selected from `ckbNodeUrl` / `ckbIndexerUrl`. `client` is the reliable option when node and indexer are exposed separately.
+
+## Build and sign transactions
+
+`buildMakerTx`, `buildTakerTx`, and `buildCancelTx` return a CCC transaction plus the fee and witness index:
+
+```typescript
+import { ccc } from '@ckb-ccc/core'
+import { Collector, buildMakerTx, CKBAsset } from 'omiga-dex'
+
+const collector = new Collector({ ckbNodeUrl: 'https://testnet.ckb.dev/' })
+const client = collector.getClient()
+
+const { rawTx, txFee, witnessIndex } = await buildMakerTx({
+  collector,
+  seller,
+  totalValue: 120_000_000n,
+  listAmount: 500_0000_0000n,
+  assetType: ccc.hexFrom(ccc.Script.from(tokenType).toBytes()),
+  ckbAsset: CKBAsset.XUDT,
+})
+
+const signedTx = await signer.signTransaction(rawTx)
+const txHash = await client.sendTransaction(signedTx, 'passthrough')
+```
+
+For a private-key signer in Node.js:
+
+```typescript
+const signer = new ccc.SignerCkbPrivateKey(client, privateKey)
+const signedTx = await signer.signTransaction(rawTx)
+```
+
+For a browser wallet, use the CCC connector and pass the connected `ccc.Signer` to your application. `JoyIDConfig` remains available only for JoyID sub-key unlock metadata used by the custom witness flow.
+
+## Assets and transaction shapes
+
+Supported order assets are defined by:
 
 ```typescript
 export enum CKBAsset {
@@ -42,6 +106,15 @@ export enum CKBAsset {
 }
 ```
 
-The [examples](./example/) demonstrate how to build FT and NFT maker, taker transactions with JoyID lock and the local test private keys are for simplicity, please DON'T use the local private keys in your production DApp.
+The transaction layout is unchanged: the SDK still builds DEX lock arguments, order cells, maker payment outputs, taker outputs, platform-fee outputs, UDT changes, and Spore CoBuild witnesses with the same byte-level formats. Only the primitive serialization and transaction construction layer has moved to CCC.
 
-You can call the [`signRawTransaction`](https://docs.joyid.dev/apis/ckb/sign-raw-tx) method to sign the raw tx with JoyID wallet through [@joyid/ckb](https://www.npmjs.com/package/@joyid/ckb) SDK, and you can send the signed transaction through CKB RPC.
+Spore transfer witnesses are generated with `@ckb-ccc/spore/advanced` using `assembleTransferSporeAction` and `injectCobuild`.
+
+## Development
+
+```bash
+npm test
+npm run build
+```
+
+Some examples use a local secp256r1 key for deterministic reproduction. Never use the example private keys in production. The examples are under `example/` and use the CCC transaction and serialization APIs as well.

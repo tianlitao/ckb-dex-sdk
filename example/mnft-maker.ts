@@ -1,9 +1,8 @@
-import { serializeScript } from '@nervosnetwork/ckb-sdk-utils'
+import { ccc } from '@ckb-ccc/core'
 import { Collector } from '../src/collector'
 import { addressFromP256PrivateKey, append0x, keyFromP256Private } from '../src/utils'
 import { Aggregator } from '../src/aggregator'
-import { ConnectResponseData } from '@joyid/ckb'
-import { CKBAsset, JoyIDConfig } from '../src/types'
+import { CKBAsset, JoyIDConfig, JoyIDConnectData } from '../src/types'
 import { buildMakerTx } from '../src/order'
 import { signSecp256r1Tx } from './secp256r1'
 import { calculateNFTMakerListPackage } from '../src/order/maker'
@@ -22,8 +21,8 @@ const maker = async () => {
   console.log('seller address: ', seller)
 
   const aggregator = new Aggregator('https://cota.nervina.dev/aggregator')
-  // The connectData is the response of the connect with @joyid/ckb
-  const connectData: ConnectResponseData = {
+  // Connection data returned by the JoyID connect flow
+  const connectData: JoyIDConnectData = {
     address: seller,
     ethAddress: '',
     nostrPubkey: '',
@@ -31,17 +30,17 @@ const maker = async () => {
     keyType: 'main_key',
     alg: -7,
   }
-  // The JoyIDConfig is needed if the dapps use JoyID Wallet to connect and sign ckb transaction
+  // JoyID metadata is only needed for JoyID sub-key witnesses
   const joyID: JoyIDConfig = {
     aggregator,
     connectData,
   }
 
   // The difference between the capacity occupied by the owner lock and the seller lock and the result may be negative
-  const listPackage = calculateNFTMakerListPackage(seller)
+  const listPackage = await calculateNFTMakerListPackage(seller, undefined, collector.getClient())
 
   const totalValue = BigInt(800_0000_0000) + listPackage
-  const mNftType: CKBComponents.Script = {
+  const mNftType: ccc.ScriptLike = {
     codeHash: '0xb1837b5ad01a88558731953062d1f5cb547adf89ece01e8934a9f0aeed2d959f',
     hashType: 'type',
     args: '0x3939ecec56db8161b6308c84d6f5f9f12d00d1f00000000100000006',
@@ -53,18 +52,17 @@ const maker = async () => {
     seller,
     // The price whose unit is shannon for CKB native token
     totalValue,
-    assetType: append0x(serializeScript(mNftType)),
+    assetType: append0x(ccc.hexFrom(ccc.Script.from(mNftType).toBytes())),
     ckbAsset: CKBAsset.MNFT,
   })
 
   const key = keyFromP256Private(SELLER_MAIN_PRIVATE_KEY)
   const signedTx = signSecp256r1Tx(key, rawTx)
 
-  // You can call the `signRawTransaction` method to sign the raw tx with JoyID wallet through @joyid/ckb SDK
-  // please make sure the buyer address is the JoyID wallet ckb address
-  // const signedTx = await signRawTransaction(rawTx as CKBTransaction, seller)
+  // The rawTx is a CCC Transaction. Sign it with the connected CCC signer in a browser app:
+  // const signedTx = await signer.signTransaction(rawTx)
 
-  let txHash = await collector.getCkb().rpc.sendTransaction(signedTx, 'passthrough')
+  let txHash = await collector.getClient().sendTransaction(signedTx, 'passthrough')
   console.info(`The mNFT asset has been listed with tx hash: ${txHash}`)
 }
 

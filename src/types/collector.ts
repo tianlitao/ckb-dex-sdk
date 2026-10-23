@@ -1,24 +1,18 @@
-import { Capacity, Hex } from '.'
+import { ccc } from '@ckb-ccc/core'
 import { Aggregator } from '../aggregator'
 import { Collector } from '../collector'
 
-export interface IndexerCell {
-  blockNumber: CKBComponents.BlockNumber
-  outPoint: CKBComponents.OutPoint
-  output: CKBComponents.CellOutput
-  outputData: Hex
-  txIndex: Hex
-}
+export type IndexerCell = ccc.Cell
 
 export interface IndexerCapacity {
-  blockNumber: CKBComponents.BlockNumber
-  blockHash: CKBComponents.Hash
-  capacity: Hex
+  blockNumber?: bigint
+  blockHash?: string
+  capacity: bigint
 }
 
 export interface CollectResult {
-  inputs: CKBComponents.CellInput[]
-  capacity: Capacity
+  inputs: ccc.CellInput[]
+  capacity: bigint
 }
 
 export interface CollectUdtResult extends CollectResult {

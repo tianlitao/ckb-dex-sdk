@@ -1,9 +1,8 @@
-import { serializeOutPoint } from '@nervosnetwork/ckb-sdk-utils'
+import { ccc } from '@ckb-ccc/core'
 import { Collector } from '../src/collector'
 import { addressFromP256PrivateKey, keyFromP256Private } from '../src/utils'
 import { Aggregator } from '../src/aggregator'
-import { ConnectResponseData } from '@joyid/ckb'
-import { CKBAsset, JoyIDConfig } from '../src/types'
+import { CKBAsset, JoyIDConfig, JoyIDConnectData } from '../src/types'
 import { buildCancelTx } from '../src/order'
 import { signSecp256r1Tx } from './secp256r1'
 
@@ -20,8 +19,8 @@ const cancel = async () => {
   console.log('seller address: ', seller)
 
   const aggregator = new Aggregator('https://cota.nervina.dev/aggregator')
-  // The connectData is the response of the connect with @joyid/ckb
-  const connectData: ConnectResponseData = {
+  // Connection data returned by the JoyID connect flow
+  const connectData: JoyIDConnectData = {
     address: seller,
     ethAddress: '',
     nostrPubkey: '',
@@ -29,13 +28,13 @@ const cancel = async () => {
     keyType: 'main_key',
     alg: -7,
   }
-  // The JoyIDConfig is needed if the dapps use JoyID Wallet to connect and sign ckb transaction
+  // JoyID metadata is only needed for JoyID sub-key witnesses
   const joyID: JoyIDConfig = {
     aggregator,
     connectData,
   }
 
-  const orderOutPoints: CKBComponents.OutPoint[] = [
+  const orderOutPoints: ccc.OutPointLike[] = [
     {
       txHash: '0x1e618ded1c00458cc6721841b995fb1032ddab6e530d6c4b6d51f69bcf6c6116',
       index: '0x0',
@@ -46,18 +45,17 @@ const cancel = async () => {
     collector,
     joyID,
     seller,
-    orderOutPoints: orderOutPoints.map(serializeOutPoint),
+    orderOutPoints: orderOutPoints.map(outPoint => ccc.hexFrom(ccc.OutPoint.from(outPoint).toBytes())),
     ckbAsset: CKBAsset.SPORE,
   })
 
   const key = keyFromP256Private(SELLER_MAIN_PRIVATE_KEY)
   const signedTx = signSecp256r1Tx(key, rawTx, witnessIndex)
 
-  // You can call the `signRawTransaction` method to sign the raw tx with JoyID wallet through @joyid/ckb SDK
-  // please make sure the buyer address is the JoyID wallet ckb address
-  // const signedTx = await signRawTransaction(rawTx as CKBTransaction, seller)
+  // The rawTx is a CCC Transaction. Sign it with the connected CCC signer in a browser app:
+  // const signedTx = await signer.signTransaction(rawTx)
 
-  let txHash = await collector.getCkb().rpc.sendTransaction(signedTx, 'passthrough')
+  let txHash = await collector.getClient().sendTransaction(signedTx, 'passthrough')
   console.info(`The Spore asset has been cancelled with tx hash: ${txHash}`)
 }
 

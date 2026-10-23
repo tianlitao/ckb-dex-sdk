@@ -1,8 +1,7 @@
-import { addressToScript, blake160, getTransactionSize, serializeScript, serializeWitnessArgs } from '@nervosnetwork/ckb-sdk-utils'
-import { blockchain } from '@ckb-lumos/base'
-import { getDexLockScript, getCotaTypeScript, getJoyIDCellDep, MAX_FEE, JOYID_ESTIMATED_WITNESS_LOCK_SIZE, CKB_UNIT } from '../constants'
+import { ccc } from '@ckb-ccc/core'
+import { getDexLockScript, getCotaTypeScript, getJoyIDCellDeps, MAX_FEE, JOYID_ESTIMATED_WITNESS_LOCK_SIZE, CKB_UNIT } from '../constants'
 import { Hex, SubkeyUnlockReq, MakerParams, MakerResult, CKBAsset, Address } from '../types'
-import { append0x, remove0x, u128ToLe } from '../utils'
+import { append0x } from '../utils'
 import { AssetException, NoCotaCellException, NoLiveCellException, NFTException } from '../exceptions'
 import {
   calculateEmptyCellMinCapacity,
@@ -14,48 +13,45 @@ import {
   isUdtAsset,
   extraLockCellCapacity,
 } from './helper'
-import { CKBTransaction } from '@joyid/ckb'
 import { OrderArgs } from './orderArgs'
 
 // The difference between the capacity occupied by the owner lock and the seller lock and the result may be negative
-export const calculateNFTMakerListPackage = (seller: string | CKBComponents.Script, unitType?: Address): bigint => {
-  const sellerLock = typeof seller === 'string' ? addressToScript(seller) : seller
-  const sellerLockArgsSize = remove0x(sellerLock.args).length / 2
+export const calculateNFTMakerListPackage = async (
+  seller: string | ccc.ScriptLike,
+  unitType?: Address,
+  client?: ccc.Client,
+): Promise<bigint> => {
+  if (typeof seller === 'string' && !client) {
+    throw new Error('A CCC client is required when seller is an address string')
+  }
+  const sellerLock =
+    typeof seller === 'string' ? await ccc.Address.fromString(seller, client!).then(address => address.script) : ccc.Script.from(seller)
 
   // The setup and totalValue are only used as a placeholder and does not affect the final size calculation.
   let setup = 4
-  // unitType is not null, undefined
   if (unitType != null) {
     setup = setup | 0b0000_0010
   }
-  const totalValue = BigInt(0)
-  const orderArgs = new OrderArgs(sellerLock, setup, totalValue, unitType)
-  const orderArgsSize = remove0x(orderArgs.toHex()).length / 2
+  const orderArgs = new OrderArgs(sellerLock, setup, BigInt(0), unitType)
+  const orderArgsSize = ccc.bytesFrom(orderArgs.toHex()).length
 
-  return BigInt(orderArgsSize - sellerLockArgsSize) * CKB_UNIT
+  return BigInt(orderArgsSize - ccc.bytesFrom(sellerLock.args).length) * CKB_UNIT
 }
 
-export const calculateUDTMakerListPackage = (
-  seller: string | CKBComponents.Script,
-  assetType?: Hex | CKBComponents.Script,
-  unitType?: Address,
-): bigint => {
-  const sellerLock = typeof seller === 'string' ? addressToScript(seller) : seller
+export const calculateUDTMakerListPackage = (seller: ccc.ScriptLike, assetType?: Hex | ccc.ScriptLike, unitType?: Address): bigint => {
+  const sellerLock = ccc.Script.from(seller)
 
   // The setup and totalValue are only used as a placeholder and does not affect the final size calculation.
   let setup = 4
-  // unitType is not null, undefined
   if (unitType != null) {
     setup = setup | 0b0000_0010
   }
-  const totalValue = BigInt(0)
-  const orderArgs = new OrderArgs(sellerLock, setup, totalValue, unitType)
-  // The CKB network does not affect the final orderLock size calculation.
-  const orderLock: CKBComponents.Script = {
+  const orderArgs = new OrderArgs(sellerLock, setup, BigInt(0), unitType)
+  const orderLock = ccc.Script.from({
     ...getDexLockScript(false),
     args: orderArgs.toHex(),
-  }
-  const typeScript = typeof assetType === 'string' ? (blockchain.Script.unpack(assetType) as CKBComponents.Script) : assetType
+  })
+  const typeScript = typeof assetType === 'string' ? ccc.Script.fromBytes(assetType) : assetType ? ccc.Script.from(assetType) : undefined
 
   return calculateUdtCellCapacity(orderLock, typeScript)
 }
@@ -72,48 +68,45 @@ export const buildMakerTx = async ({
   unitType,
 }: MakerParams): Promise<MakerResult> => {
   let txFee = fee ?? MAX_FEE
+  const client = collector.getClient()
   const isMainnet = seller.startsWith('ckb')
-  const sellerLock = addressToScript(seller)
-  const assetTypeScript = blockchain.Script.unpack(assetType) as CKBComponents.Script
+  const sellerLock = await collector.getAddressLock(seller)
+  const assetTypeScript = ccc.Script.fromBytes(assetType)
 
-  const emptyCells = await collector.getCells({
-    lock: sellerLock,
-  })
+  const emptyCells = await collector.getCells({ lock: sellerLock })
   if (!emptyCells || emptyCells.length === 0) {
     throw new NoLiveCellException('The address has no empty cells')
   }
+
   let setup = isUdtAsset(ckbAsset) ? 0 : 0b0000_0100
-  // unitType is not null, undefined
   if (unitType != null) {
     setup = setup | 0b0000_0010
   }
   const orderArgs = new OrderArgs(sellerLock, setup, totalValue, unitType)
-  const orderLock: CKBComponents.Script = {
+  const orderLock = ccc.Script.from({
     ...getDexLockScript(isMainnet),
     args: orderArgs.toHex(),
-  }
+  })
   const minCellCapacity = calculateEmptyCellMinCapacity(sellerLock)
 
-  let inputs: CKBComponents.CellInput[] = []
-  let outputs: CKBComponents.CellOutput[] = []
+  let inputs: ccc.CellInput[] = []
+  let outputs: ccc.CellOutput[] = []
   let outputsData: Hex[] = []
-  let cellDeps: CKBComponents.CellDep[] = []
+  let cellDeps: ccc.CellDepLike[] = []
   let changeCapacity = BigInt(0)
   let orderCellCapacity = BigInt(0)
   let sporeCoBuild = '0x'
 
   if (isUdtAsset(ckbAsset)) {
-    const udtCells = await collector.getCells({
-      lock: sellerLock,
-      type: assetTypeScript,
-    })
+    const udtCells = await collector.getCells({ lock: sellerLock, type: assetTypeScript })
     if (!udtCells || udtCells.length === 0) {
       throw new AssetException('The address has no UDT cells')
     }
-    let { inputs: udtInputs, capacity: sumInputsCapacity, amount: inputsAmount } = collector.collectUdtInputs(udtCells, listAmount)
+    const { inputs: udtInputs, capacity: sumInputsCapacity, amount: inputsAmount } = collector.collectUdtInputs(udtCells, listAmount)
 
     orderCellCapacity = calculateUdtCellCapacity(orderLock, assetTypeScript)
     const udtCellCapacity = calculateUdtCellCapacity(sellerLock, assetTypeScript)
+    let totalInputCapacity = sumInputsCapacity
     if (sumInputsCapacity < orderCellCapacity + udtCellCapacity + minCellCapacity + txFee) {
       const needCKB = ((orderCellCapacity + minCellCapacity + CKB_UNIT) / CKB_UNIT).toString()
       const errMsg = `At least ${needCKB} free CKB (refundable) is required to place a sell order.`
@@ -125,46 +118,43 @@ export const buildMakerTx = async ({
         errMsg,
       )
       inputs = [...emptyInputs, ...udtInputs]
-      sumInputsCapacity += emptyInputsCapacity
+      totalInputCapacity += emptyInputsCapacity
     } else {
       inputs = udtInputs
     }
 
-    outputs.push({
-      lock: orderLock,
-      type: assetTypeScript,
-      capacity: append0x(orderCellCapacity.toString(16)),
-    })
-    outputsData.push(append0x(u128ToLe(listAmount)))
+    outputs.push(
+      ccc.CellOutput.from({
+        lock: orderLock,
+        type: assetTypeScript,
+        capacity: orderCellCapacity,
+      }),
+    )
+    outputsData.push(ccc.hexFrom(ccc.numLeToBytes(listAmount, 16)))
 
-    changeCapacity = sumInputsCapacity - orderCellCapacity - txFee
+    changeCapacity = totalInputCapacity - orderCellCapacity - txFee
     if (inputsAmount > listAmount) {
       changeCapacity -= udtCellCapacity
-      outputs.push({
-        lock: sellerLock,
-        type: assetTypeScript,
-        capacity: append0x(udtCellCapacity.toString(16)),
-      })
-      outputsData.push(append0x(u128ToLe(inputsAmount - listAmount)))
+      outputs.push(
+        ccc.CellOutput.from({
+          lock: sellerLock,
+          type: assetTypeScript,
+          capacity: udtCellCapacity,
+        }),
+      )
+      outputsData.push(ccc.hexFrom(ccc.numLeToBytes(inputsAmount - listAmount, 16)))
     }
-    outputs.push({
-      lock: sellerLock,
-      capacity: append0x(changeCapacity.toString(16)),
-    })
+    outputs.push(ccc.CellOutput.from({ lock: sellerLock, capacity: changeCapacity }))
     outputsData.push('0x')
   } else {
-    const nftCells = await collector.getCells({
-      lock: sellerLock,
-      type: assetTypeScript,
-    })
+    const nftCells = await collector.getCells({ lock: sellerLock, type: assetTypeScript })
     if (!nftCells || nftCells.length === 0) {
       throw new NFTException('The address has no NFT cells')
     }
     const nftCell = nftCells[0]
     orderCellCapacity = calculateNFTCellCapacity(orderLock, nftCell)
     orderCellCapacity += extraLockCellCapacity(sellerLock)
-    const nftInputCapacity = BigInt(nftCell.output.capacity)
-    const orderNeedCapacity = orderCellCapacity > nftInputCapacity ? orderCellCapacity - nftInputCapacity : BigInt(0)
+    const orderNeedCapacity = orderCellCapacity > nftCell.cellOutput.capacity ? orderCellCapacity - nftCell.cellOutput.capacity : BigInt(0)
 
     const needCKB = ((orderNeedCapacity + minCellCapacity + CKB_UNIT) / CKB_UNIT).toString()
     const errMsg = `At least ${needCKB} free CKB (refundable) is required to place a sell order.`
@@ -175,24 +165,21 @@ export const buildMakerTx = async ({
       minCellCapacity,
       errMsg,
     )
-    const nftInput: CKBComponents.CellInput = {
-      previousOutput: nftCell.outPoint,
-      since: '0x0',
-    }
-    inputs = [...emptyInputs, nftInput]
-    const orderOutput = {
-      lock: orderLock,
-      capacity: append0x(orderCellCapacity.toString(16)),
-      type: nftCell.output.type,
-    }
+    inputs = [...emptyInputs, ccc.CellInput.from(nftCell)]
+
+    const orderOutput = ccc.CellOutput.from(
+      {
+        lock: orderLock,
+        capacity: orderCellCapacity,
+        type: nftCell.cellOutput.type,
+      },
+      nftCell.outputData,
+    )
     outputs.push(orderOutput)
     outputsData.push(nftCell.outputData)
 
-    changeCapacity = emptyInputsCapacity + nftInputCapacity - orderCellCapacity - txFee
-    outputs.push({
-      lock: sellerLock,
-      capacity: append0x(changeCapacity.toString(16)),
-    })
+    changeCapacity = emptyInputsCapacity + nftCell.cellOutput.capacity - orderCellCapacity - txFee
+    outputs.push(ccc.CellOutput.from({ lock: sellerLock, capacity: changeCapacity }))
     outputsData.push('0x')
 
     if (ckbAsset === CKBAsset.SPORE) {
@@ -202,60 +189,59 @@ export const buildMakerTx = async ({
 
   cellDeps.push(getAssetCellDepNew(assetTypeScript.codeHash, isMainnet))
   if (joyID) {
-    cellDeps.push(getJoyIDCellDep(isMainnet))
+    cellDeps.push(...(await getJoyIDCellDeps(collector.getClient())))
   }
 
-  const emptyWitness = { lock: '', inputType: '', outputType: '' }
-  let witnesses = inputs.map((_, index) => (index === 0 ? serializeWitnessArgs(emptyWitness) : '0x'))
+  const emptyWitness = ccc.hexFrom(ccc.WitnessArgs.from({}).toBytes())
+  const witnesses: Hex[] = inputs.map((_, index) => (index === 0 ? emptyWitness : '0x'))
   if (ckbAsset === CKBAsset.SPORE) {
     witnesses.push(sporeCoBuild)
   }
+
   if (joyID && joyID.connectData.keyType === 'sub_key') {
-    const pubkeyHash = append0x(blake160(append0x(joyID.connectData.pubkey), 'hex'))
+    const pubkeyHash = ccc.hashCkbShort(joyID.connectData.pubkey)
     const req: SubkeyUnlockReq = {
-      lockScript: serializeScript(sellerLock),
+      lockScript: ccc.hexFrom(sellerLock.toBytes()),
       pubkeyHash,
-      algIndex: 1, // secp256r1
+      algIndex: 1,
     }
     const { unlockEntry } = await joyID.aggregator.generateSubkeyUnlockSmt(req)
-    const emptyWitness = {
-      lock: '',
-      inputType: '',
-      outputType: append0x(unlockEntry),
-    }
-    witnesses[0] = serializeWitnessArgs(emptyWitness)
+    witnesses[0] = ccc.hexFrom(
+      ccc.WitnessArgs.from({
+        outputType: append0x(unlockEntry),
+      }).toBytes(),
+    )
 
     const cotaType = getCotaTypeScript(isMainnet)
     const cotaCells = await collector.getCells({ lock: sellerLock, type: cotaType })
     if (!cotaCells || cotaCells.length === 0) {
       throw new NoCotaCellException("Cota cell doesn't exist")
     }
-    const cotaCell = cotaCells[0]
-    const cotaCellDep: CKBComponents.CellDep = {
-      outPoint: cotaCell.outPoint,
+    const cotaCellDep = ccc.CellDep.from({
+      outPoint: cotaCells[0].outPoint,
       depType: 'code',
-    }
+    })
     cellDeps = [cotaCellDep, ...cellDeps]
   }
-  const tx: CKBComponents.RawTransaction = {
-    version: '0x0',
+
+  const tx = ccc.Transaction.from({
+    version: 0,
     cellDeps,
     headerDeps: [],
     inputs,
     outputs,
     outputsData,
     witnesses,
-  }
+  })
 
   if (txFee === MAX_FEE) {
-    const txSize = getTransactionSize(tx) + (joyID ? JOYID_ESTIMATED_WITNESS_LOCK_SIZE : 0)
+    const txSize = tx.toBytes().length + 4 + (joyID ? JOYID_ESTIMATED_WITNESS_LOCK_SIZE : 0)
     const estimatedTxFee = calculateTransactionFee(txSize)
     txFee = estimatedTxFee
-    const estimatedChangeCapacity = changeCapacity + (MAX_FEE - estimatedTxFee)
-    tx.outputs[tx.outputs.length - 1].capacity = append0x(estimatedChangeCapacity.toString(16))
+    tx.outputs[tx.outputs.length - 1].capacity += MAX_FEE - estimatedTxFee
   }
 
-  const listPackage = isUdtAsset(ckbAsset) ? orderCellCapacity : calculateNFTMakerListPackage(seller, unitType)
+  const listPackage = isUdtAsset(ckbAsset) ? orderCellCapacity : await calculateNFTMakerListPackage(sellerLock, unitType, client)
 
-  return { rawTx: tx as CKBTransaction, txFee, listPackage, witnessIndex: 0 }
+  return { rawTx: tx, txFee, listPackage, witnessIndex: 0 }
 }

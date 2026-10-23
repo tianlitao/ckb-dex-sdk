@@ -1,7 +1,7 @@
-import { addressToScript, blake160, getTransactionSize, serializeScript, serializeWitnessArgs } from '@nervosnetwork/ckb-sdk-utils'
+import { ccc } from '@ckb-ccc/core'
 import {
   getCotaTypeScript,
-  getJoyIDCellDep,
+  getJoyIDCellDeps,
   getDexCellDep,
   MAX_FEE,
   JOYID_ESTIMATED_WITNESS_LOCK_SIZE,
@@ -10,7 +10,7 @@ import {
   getUSDICellDep,
 } from '../constants'
 import { CKBAsset, Hex, SubkeyUnlockReq, TakerParams, TakerResult } from '../types'
-import { append0x, u128ToLe } from '../utils'
+import { append0x } from '../utils'
 import { AssetException, NoCotaCellException, NoLiveCellException } from '../exceptions'
 import {
   calculateEmptyCellMinCapacity,
@@ -24,114 +24,109 @@ import {
   calculateUdtCellCapacity,
 } from './helper'
 import { OrderArgs } from './orderArgs'
-import { CKBTransaction } from '@joyid/ckb'
-import { ANYONE_CAN_PAY_MAINNET } from '@nervosnetwork/ckb-sdk-utils/lib/systemScripts'
 
-export const setPlatformFeeOutputs = (feeLock: CKBComponents.Script, sumSellerCapacity: bigint, platformFee: number, capacity: bigint) => {
-  const feeOutputs: CKBComponents.CellOutput[] = []
+export const setPlatformFeeOutputs = (feeLock: ccc.ScriptLike, sumSellerCapacity: bigint, platformFee: number, capacity: bigint) => {
+  const feeOutputs: ccc.CellOutput[] = []
   const feeOutputsData: Hex[] = []
   const platformFeeBigInt = BigInt(Math.floor(platformFee * 100))
 
   let payFeeCapacity = (sumSellerCapacity * platformFeeBigInt) / BigInt(10000)
-  // if(payFeeCapacity < MIN_CAPACITY){
-  //   payFeeCapacity = MIN_CAPACITY
-  // }
   payFeeCapacity += capacity
-  const output: CKBComponents.CellOutput = {
-    lock: feeLock,
-    capacity: append0x(payFeeCapacity.toString(16)),
-  }
-  feeOutputs.push(output)
+  feeOutputs.push(ccc.CellOutput.from({ lock: ccc.Script.from(feeLock), capacity: payFeeCapacity }))
   feeOutputsData.push('0x')
   return { feeOutputs, feeOutputsData, payFeeCapacity }
 }
 
-export const matchOrderOutputs = (orderCells: CKBComponents.LiveCell[], unitType?: CKBComponents.Script) => {
-  const sellerOutputs: CKBComponents.CellOutput[] = []
+export const matchOrderOutputs = (orderCells: ccc.Cell[], unitType?: ccc.ScriptLike) => {
+  const sellerOutputs: ccc.CellOutput[] = []
   const sellerOutputsData: Hex[] = []
   let sumSellerCapacity = BigInt(0)
+  const paymentType = unitType ? ccc.Script.from(unitType) : undefined
 
   for (const orderCell of orderCells) {
-    const orderArgs = OrderArgs.fromHex(orderCell.output.lock.args)
-    if (unitType != null) {
-      if (orderArgs.unitTypeHash != null) {
-        const capacity = calculateUdtCellCapacity(orderArgs.ownerLock, unitType!)
-        sumSellerCapacity += capacity
-        const output: CKBComponents.CellOutput = {
-          lock: orderArgs.ownerLock,
-          type: unitType!,
-          capacity: append0x(capacity.toString(16)),
-        }
-        sellerOutputs.push(output)
-        sellerOutputsData.push(append0x(u128ToLe(orderArgs.totalValue)))
-      } else {
+    const orderArgs = OrderArgs.fromHex(orderCell.cellOutput.lock.args)
+    if (paymentType) {
+      if (orderArgs.unitTypeHash == null) {
         throw new AssetException('The order must be payed by ckb')
       }
+      const capacity = calculateUdtCellCapacity(orderArgs.ownerLock, paymentType)
+      sumSellerCapacity += capacity
+      sellerOutputs.push(
+        ccc.CellOutput.from({
+          lock: orderArgs.ownerLock,
+          type: paymentType,
+          capacity,
+        }),
+      )
+      sellerOutputsData.push(ccc.hexFrom(ccc.numLeToBytes(orderArgs.totalValue, 16)))
     } else {
       if (orderArgs.unitTypeHash != null) {
         throw new AssetException('The order must be payed by xudt')
       }
       sumSellerCapacity += orderArgs.totalValue
-      const payCapacity = orderArgs.totalValue + BigInt(append0x(orderCell.output.capacity))
-      const output: CKBComponents.CellOutput = {
-        lock: orderArgs.ownerLock,
-        capacity: append0x(payCapacity.toString(16)),
-      }
-      sellerOutputs.push(output)
+      sellerOutputs.push(
+        ccc.CellOutput.from({
+          lock: orderArgs.ownerLock,
+          capacity: orderArgs.totalValue + orderCell.cellOutput.capacity,
+        }),
+      )
       sellerOutputsData.push('0x')
     }
   }
   return { sellerOutputs, sellerOutputsData, sumSellerCapacity }
 }
 
-export const matchNftOrderCells = (orderCells: CKBComponents.LiveCell[], buyerLock: CKBComponents.Script, unitType?: CKBComponents.Script) => {
-  let dexOutputs: CKBComponents.CellOutput[] = []
-  let dexOutputsData: Hex[] = []
+export const matchNftOrderCells = (orderCells: ccc.Cell[], buyerLock: ccc.ScriptLike, unitType?: ccc.ScriptLike) => {
+  const dexOutputs: ccc.CellOutput[] = []
+  const dexOutputsData: Hex[] = []
   let makerNetworkFee = BigInt(0)
   let dexOutputsCapacity = BigInt(0)
-  const buyerOutputs: CKBComponents.CellOutput[] = []
+  const buyerOutputs: ccc.CellOutput[] = []
   const buyerOutputsData: Hex[] = []
+  const resolvedBuyerLock = ccc.Script.from(buyerLock)
+  const paymentType = unitType ? ccc.Script.from(unitType) : undefined
 
   for (const orderCell of orderCells) {
-    const orderArgs = OrderArgs.fromHex(orderCell.output.lock.args)
-    const buyerNftCapacity = calculateNFTCellCapacity(buyerLock, orderCell)
+    const orderArgs = OrderArgs.fromHex(orderCell.cellOutput.lock.args)
+    const buyerNftCapacity = calculateNFTCellCapacity(resolvedBuyerLock, orderCell)
 
-    if (unitType != null) {
-      const capacity = calculateUdtCellCapacity(orderArgs.ownerLock, unitType!)
+    if (paymentType) {
+      const capacity = calculateUdtCellCapacity(orderArgs.ownerLock, paymentType)
       dexOutputsCapacity += capacity
-      const output: CKBComponents.CellOutput = {
-        lock: orderArgs.ownerLock,
-        type: unitType!,
-        capacity: append0x(capacity.toString(16)),
-      }
-
-      dexOutputs.push(output)
-      dexOutputsData.push(append0x(u128ToLe(orderArgs.totalValue)))
+      dexOutputs.push(
+        ccc.CellOutput.from({
+          lock: orderArgs.ownerLock,
+          type: paymentType,
+          capacity,
+        }),
+      )
+      dexOutputsData.push(ccc.hexFrom(ccc.numLeToBytes(orderArgs.totalValue, 16)))
     } else {
       dexOutputsCapacity += orderArgs.totalValue
-      const output: CKBComponents.CellOutput = {
-        lock: orderArgs.ownerLock,
-        capacity: append0x(orderArgs.totalValue.toString(16)),
-      }
-      dexOutputs.push(output)
+      dexOutputs.push(ccc.CellOutput.from({ lock: orderArgs.ownerLock, capacity: orderArgs.totalValue }))
       dexOutputsData.push('0x')
     }
 
-    // Use the order cell's real on-chain capacity minus the buyer's actual new cell capacity,
-    // instead of a theoretical estimate based on the seller lock args length.
-    makerNetworkFee += BigInt(append0x(orderCell.output.capacity)) - buyerNftCapacity
-
-    buyerOutputs.push({
-      lock: buyerLock,
-      type: orderCell.output.type,
-      capacity: `0x${buyerNftCapacity.toString(16)}`,
-    })
-    buyerOutputsData.push(orderCell.data?.content!)
+    makerNetworkFee += orderCell.cellOutput.capacity - buyerNftCapacity
+    buyerOutputs.push(
+      ccc.CellOutput.from(
+        {
+          lock: resolvedBuyerLock,
+          type: orderCell.cellOutput.type,
+          capacity: buyerNftCapacity,
+        },
+        orderCell.outputData,
+      ),
+    )
+    buyerOutputsData.push(orderCell.outputData)
   }
-  dexOutputs = dexOutputs.concat(buyerOutputs)
-  dexOutputsData = dexOutputsData.concat(buyerOutputsData)
 
-  return { dexOutputs, dexOutputsData, makerNetworkFee, dexOutputsCapacity }
+  return {
+    dexOutputs: [...dexOutputs, ...buyerOutputs],
+    dexOutputsData: [...dexOutputsData, ...buyerOutputsData],
+    makerNetworkFee,
+    dexOutputsCapacity,
+  }
 }
 
 export const buildTakerTx = async ({
@@ -149,46 +144,39 @@ export const buildTakerTx = async ({
   let txFee = fee ?? MAX_FEE
   let codeHash = '0x'
   const isMainnet = buyer.startsWith('ckb')
-  const buyerLock = addressToScript(buyer)
+  const buyerLock = await collector.getAddressLock(buyer)
 
-  const emptyCells = await collector.getCells({
-    lock: buyerLock,
-  })
+  const emptyCells = await collector.getCells({ lock: buyerLock })
   if (!emptyCells || emptyCells.length === 0) {
     throw new NoLiveCellException('The address has no empty cells')
   }
 
-  // Deserialize outPointHex array to outPoint array
   const outPoints = deserializeOutPoints(orderOutPoints)
-
-  // Fetch udt order cells with outPoints
-  const orderCells: CKBComponents.LiveCell[] = []
-  for await (const outPoint of outPoints) {
+  const orderCells: ccc.Cell[] = []
+  for (const outPoint of outPoints) {
     const cell = await collector.getLiveCell(outPoint)
     if (!cell) {
       throw new AssetException('The udt cell specified by the out point has been spent')
     }
-    if (!cell.output.type || !cell.data) {
+    if (!cell.cellOutput.type) {
       throw new AssetException('The udt cell specified by the out point must have type script')
     }
-    codeHash = cell.output.type!.codeHash
+    codeHash = cell.cellOutput.type.codeHash
     orderCells.push(cell)
   }
-  const orderInputs: CKBComponents.CellInput[] = outPoints.map(outPoint => ({
-    previousOutput: outPoint,
-    since: '0x0',
-  }))
 
-  let inputs: CKBComponents.CellInput[] = []
-  let outputs: CKBComponents.CellOutput[] = []
+  const orderInputs = outPoints.map(outPoint => ccc.CellInput.from({ previousOutput: outPoint, since: 0 }))
+  let inputs: ccc.CellInput[] = []
+  let outputs: ccc.CellOutput[] = []
   let outputsData: Hex[] = []
-  let cellDeps: CKBComponents.CellDep[] = [getDexCellDep(isMainnet), getAnyOneCanPayCellDep(isMainnet)]
+  let cellDeps: ccc.CellDepLike[] = [getDexCellDep(isMainnet), getAnyOneCanPayCellDep(isMainnet)]
   let changeCapacity = BigInt(0)
   let sporeCoBuild = '0x'
-  let anyOneInputs: CKBComponents.CellInput[] = []
+  const anyOneInputs: ccc.CellInput[] = []
+  const paymentType = unitType ? ccc.Script.from(unitType) : undefined
 
   if (isUdtAsset(ckbAsset)) {
-    const { sellerOutputs, sellerOutputsData, sumSellerCapacity } = matchOrderOutputs(orderCells, unitType)
+    const { sellerOutputs, sellerOutputsData, sumSellerCapacity } = matchOrderOutputs(orderCells, paymentType)
     const { udtOutputs, udtOutputsData, sumUdtCapacity } = cleanUpUdtOutputs(orderCells, buyerLock)
 
     let needInputsCapacity = sumSellerCapacity + sumUdtCapacity
@@ -196,12 +184,15 @@ export const buildTakerTx = async ({
     outputsData = [...sellerOutputsData, ...udtOutputsData]
 
     if (platform) {
-      const platformLock = addressToScript(platform)
+      if (platformFee == null || !platformCell) {
+        throw new AssetException('platformFee and platformCell are required when platform is set')
+      }
+      const platformLock = await collector.getAddressLock(platform)
       const { feeOutputs, feeOutputsData, payFeeCapacity } = setPlatformFeeOutputs(
         platformLock,
         sumSellerCapacity,
-        platformFee!,
-        platformCell!['capacity'],
+        platformFee,
+        platformCell.capacity,
       )
       needInputsCapacity += payFeeCapacity
       outputs = [...outputs, ...feeOutputs]
@@ -210,19 +201,16 @@ export const buildTakerTx = async ({
 
     const minCellCapacity = calculateEmptyCellMinCapacity(buyerLock)
     const needCKB = ((needInputsCapacity + minCellCapacity + CKB_UNIT) / CKB_UNIT).toString()
-    const errMsg = `At least ${needCKB} free CKB is required to take the order.`
     const { inputs: emptyInputs, capacity: inputsCapacity } = collector.collectInputs(
       emptyCells,
       needInputsCapacity,
       txFee,
       minCellCapacity,
-      errMsg,
+      `At least ${needCKB} free CKB is required to take the order.`,
     )
-    if (platform) {
-      anyOneInputs.push({
-        previousOutput: { txHash: platformCell!['txHash'], index: platformCell!['index'] },
-        since: '0x0',
-      })
+
+    if (platform && platformCell) {
+      anyOneInputs.push(ccc.CellInput.from({ previousOutput: platformCell, since: 0 }))
       inputs = [...orderInputs, ...anyOneInputs, ...emptyInputs]
     } else {
       inputs = [...orderInputs, ...emptyInputs]
@@ -230,65 +218,48 @@ export const buildTakerTx = async ({
 
     let inputXudtCapacity = BigInt(0)
     let outputXudtCapacity = BigInt(0)
-    if (unitType != null) {
-      const xudtCells = await collector.getCells({
-        lock: buyerLock,
-        type: unitType,
-      })
-
+    if (paymentType) {
+      const xudtCells = await collector.getCells({ lock: buyerLock, type: paymentType })
       if (!xudtCells || xudtCells.length === 0) {
         throw new NoLiveCellException('The address has no xudt cells')
       }
 
       let totalValue = BigInt(0)
-
       for (const orderCell of orderCells) {
-        const orderArgs = OrderArgs.fromHex(orderCell.output.lock.args)
-        if (orderArgs.unitTypeHash != null) {
-          totalValue += orderArgs.totalValue
-        } else {
+        const orderArgs = OrderArgs.fromHex(orderCell.cellOutput.lock.args)
+        if (orderArgs.unitTypeHash == null) {
           throw new AssetException('The order must be payed by xudt')
         }
+        totalValue += orderArgs.totalValue
       }
-      const { inputs: xudtInputs, capacity: sumCapacity, amount: sumAmount } = collector.collectUdtInputs(xudtCells!, totalValue)
+
+      const { inputs: xudtInputs, capacity: sumCapacity, amount: sumAmount } = collector.collectUdtInputs(xudtCells, totalValue)
       inputs.push(...xudtInputs)
       inputXudtCapacity = sumCapacity
 
-      const chagneXudt = sumAmount - totalValue
-      const capacity = calculateUdtCellCapacity(buyerLock, unitType!)
-      const changeXudtOutput: CKBComponents.CellOutput = {
-        lock: buyerLock,
-        capacity: append0x(capacity.toString(16)),
-        type: unitType!
-      }
-      outputs.push(changeXudtOutput)
-      outputsData.push(append0x(u128ToLe(chagneXudt)))
+      const changeXudt = sumAmount - totalValue
+      const capacity = calculateUdtCellCapacity(buyerLock, paymentType)
+      outputs.push(ccc.CellOutput.from({ lock: buyerLock, type: paymentType, capacity }))
+      outputsData.push(ccc.hexFrom(ccc.numLeToBytes(changeXudt, 16)))
       outputXudtCapacity = capacity
     }
 
     changeCapacity = inputsCapacity + inputXudtCapacity - needInputsCapacity - txFee - outputXudtCapacity
-    const changeOutput: CKBComponents.CellOutput = {
-      lock: buyerLock,
-      capacity: append0x(changeCapacity.toString(16)),
-    }
-
-    outputs.push(changeOutput)
+    outputs.push(ccc.CellOutput.from({ lock: buyerLock, capacity: changeCapacity }))
     outputsData.push('0x')
   } else {
-    const { dexOutputs, dexOutputsData, makerNetworkFee, dexOutputsCapacity } = matchNftOrderCells(orderCells, buyerLock, unitType)
-
+    const { dexOutputs, dexOutputsData, makerNetworkFee, dexOutputsCapacity } = matchNftOrderCells(orderCells, buyerLock, paymentType)
     outputs = dexOutputs
     outputsData = dexOutputsData
 
     const minCellCapacity = calculateEmptyCellMinCapacity(buyerLock)
     const needCKB = ((dexOutputsCapacity + minCellCapacity + CKB_UNIT) / CKB_UNIT).toString()
-    const errMsg = `At least ${needCKB} free CKB is required to take the order.`
     const { inputs: emptyInputs, capacity: inputsCapacity } = collector.collectInputs(
       emptyCells,
       dexOutputsCapacity,
       txFee,
       minCellCapacity,
-      errMsg,
+      `At least ${needCKB} free CKB is required to take the order.`,
     )
     inputs = [...orderInputs, ...emptyInputs]
 
@@ -299,117 +270,94 @@ export const buildTakerTx = async ({
 
     let inputXudtCapacity = BigInt(0)
     let outputXudtCapacity = BigInt(0)
-    if (unitType != null) {
-      const xudtCells = await collector.getCells({
-        lock: buyerLock,
-        type: unitType!,
-      })
-
+    if (paymentType) {
+      const xudtCells = await collector.getCells({ lock: buyerLock, type: paymentType })
       if (!xudtCells || xudtCells.length === 0) {
         throw new NoLiveCellException('The address has no xudt cells')
       }
 
       let totalValue = BigInt(0)
-
       for (const orderCell of orderCells) {
-        const orderArgs = OrderArgs.fromHex(orderCell.output.lock.args)
-        if (orderArgs.unitTypeHash != null) {
-          totalValue += orderArgs.totalValue
-        } else {
+        const orderArgs = OrderArgs.fromHex(orderCell.cellOutput.lock.args)
+        if (orderArgs.unitTypeHash == null) {
           throw new AssetException('The order must be payed by xudt')
         }
+        totalValue += orderArgs.totalValue
       }
-      const { inputs: xudtInputs, capacity: sumCapacity, amount: sumAmount } = collector.collectUdtInputs(xudtCells!, totalValue)
+
+      const { inputs: xudtInputs, capacity: sumCapacity, amount: sumAmount } = collector.collectUdtInputs(xudtCells, totalValue)
       inputs.push(...xudtInputs)
       inputXudtCapacity = sumCapacity
 
       const changeXudt = sumAmount - totalValue
-      const capacity = calculateUdtCellCapacity(buyerLock, unitType!)
-      const changeXudtOutput: CKBComponents.CellOutput = {
-        lock: buyerLock,
-        capacity: append0x(capacity.toString(16)),
-        type: unitType!
-      }
-      outputs.push(changeXudtOutput)
-      outputsData.push(append0x(u128ToLe(changeXudt)))
+      const capacity = calculateUdtCellCapacity(buyerLock, paymentType)
+      outputs.push(ccc.CellOutput.from({ lock: buyerLock, type: paymentType, capacity }))
+      outputsData.push(ccc.hexFrom(ccc.numLeToBytes(changeXudt, 16)))
       outputXudtCapacity = capacity
     }
 
     changeCapacity = inputsCapacity + makerNetworkFee + inputXudtCapacity - dexOutputsCapacity - txFee - outputXudtCapacity
-    const changeOutput: CKBComponents.CellOutput = {
-      lock: buyerLock,
-      capacity: append0x(changeCapacity.toString(16)),
-    }
-
-    outputs.push(changeOutput)
+    outputs.push(ccc.CellOutput.from({ lock: buyerLock, capacity: changeCapacity }))
     outputsData.push('0x')
   }
 
-  if (unitType != null) {
+  if (paymentType) {
     cellDeps.push(getUSDICellDep(isMainnet))
   }
   cellDeps.push(getAssetCellDepNew(codeHash, isMainnet))
   if (joyID) {
-    cellDeps.push(getJoyIDCellDep(isMainnet))
+    cellDeps.push(...(await getJoyIDCellDeps(collector.getClient())))
   }
 
-  const emptyWitness = { lock: '', inputType: '', outputType: '' }
-  const witnesses = inputs.map((_, index) =>
-    index === orderInputs.length + anyOneInputs.length ? serializeWitnessArgs(emptyWitness) : '0x',
-  )
+  const emptyWitness = ccc.hexFrom(ccc.WitnessArgs.from({}).toBytes())
+  const witnesses: Hex[] = inputs.map((_, index) => (index === orderInputs.length + anyOneInputs.length ? emptyWitness : '0x'))
   if (ckbAsset === CKBAsset.SPORE) {
     witnesses.push(sporeCoBuild)
   } else if (ckbAsset === CKBAsset.MNFT) {
-    // MNFT must not be held and transferred by anyone-can-pay lock
     orderInputs.forEach((_, index) => {
-      witnesses[index] = serializeWitnessArgs({ lock: '0x00', inputType: '', outputType: '' })
+      witnesses[index] = ccc.hexFrom(ccc.WitnessArgs.from({ lock: '0x00' }).toBytes())
     })
   }
+
   if (joyID && joyID.connectData.keyType === 'sub_key') {
-    const pubkeyHash = append0x(blake160(append0x(joyID.connectData.pubkey), 'hex'))
+    const pubkeyHash = ccc.hashCkbShort(joyID.connectData.pubkey)
     const req: SubkeyUnlockReq = {
-      lockScript: serializeScript(buyerLock),
+      lockScript: ccc.hexFrom(buyerLock.toBytes()),
       pubkeyHash,
-      algIndex: 1, // secp256r1
+      algIndex: 1,
     }
     const { unlockEntry } = await joyID.aggregator.generateSubkeyUnlockSmt(req)
-    const emptyWitness = {
-      lock: '',
-      inputType: '',
-      outputType: append0x(unlockEntry),
-    }
-    witnesses[orderInputs.length] = serializeWitnessArgs(emptyWitness)
+    witnesses[orderInputs.length] = ccc.hexFrom(
+      ccc.WitnessArgs.from({
+        outputType: append0x(unlockEntry),
+      }).toBytes(),
+    )
 
     const cotaType = getCotaTypeScript(isMainnet)
     const cotaCells = await collector.getCells({ lock: buyerLock, type: cotaType })
     if (!cotaCells || cotaCells.length === 0) {
       throw new NoCotaCellException("Cota cell doesn't exist")
     }
-    const cotaCell = cotaCells[0]
-    const cotaCellDep: CKBComponents.CellDep = {
-      outPoint: cotaCell.outPoint,
-      depType: 'code',
-    }
+    const cotaCellDep = ccc.CellDep.from({ outPoint: cotaCells[0].outPoint, depType: 'code' })
     cellDeps = [cotaCellDep, ...cellDeps]
   }
 
-  const tx: CKBComponents.RawTransaction = {
-    version: '0x0',
+  const tx = ccc.Transaction.from({
+    version: 0,
     cellDeps,
     headerDeps: [],
     inputs,
     outputs,
     outputsData,
     witnesses,
-  }
+  })
 
   if (txFee === MAX_FEE) {
-    const txSize = getTransactionSize(tx) + (joyID ? JOYID_ESTIMATED_WITNESS_LOCK_SIZE : 0)
+    const txSize = tx.toBytes().length + 4 + (joyID ? JOYID_ESTIMATED_WITNESS_LOCK_SIZE : 0)
     const estimatedTxFee = calculateTransactionFee(txSize)
     txFee = estimatedTxFee
-    const estimatedChangeCapacity = changeCapacity + (MAX_FEE - estimatedTxFee)
-    tx.outputs[tx.outputs.length - 1].capacity = append0x(estimatedChangeCapacity.toString(16))
+    tx.outputs[tx.outputs.length - 1].capacity += MAX_FEE - estimatedTxFee
   }
 
-  return { rawTx: tx as CKBTransaction, txFee, witnessIndex: orderInputs.length + anyOneInputs.length }
+  return { rawTx: tx, txFee, witnessIndex: orderInputs.length + anyOneInputs.length }
 }

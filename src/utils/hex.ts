@@ -1,4 +1,4 @@
-import { hexToBytes, bytesToHex } from '@nervosnetwork/ckb-sdk-utils'
+import { ccc } from '@ckb-ccc/core'
 
 export const remove0x = (hex: string): string => {
   if (hex.startsWith('0x')) {
@@ -10,6 +10,11 @@ export const remove0x = (hex: string): string => {
 export const append0x = (hex?: string): string => {
   return hex?.startsWith('0x') ? hex : `0x${hex}`
 }
+
+export const hexToBytes = (hex: string): Uint8Array => ccc.bytesFrom(append0x(hex))
+
+// Keep the historical return shape: bytes as hex without the 0x prefix.
+export const bytesToHex = (bytes: Uint8Array): string => remove0x(ccc.hexFrom(bytes))
 
 const ArrayBufferToHex = (arrayBuffer: ArrayBuffer): string => {
   return Array.prototype.map.call(new Uint8Array(arrayBuffer), x => ('00' + x.toString(16)).slice(-2)).join('')

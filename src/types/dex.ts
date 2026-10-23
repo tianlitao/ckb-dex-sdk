@@ -1,11 +1,20 @@
-import { CKBTransaction, ConnectResponseData } from '@joyid/ckb'
+import { ccc } from '@ckb-ccc/core'
 import { Aggregator } from '../aggregator'
 import { Collector } from '../collector'
 import { Address, Hex, Bytes } from './common'
 
+export interface JoyIDConnectData {
+  address: string
+  ethAddress?: string
+  nostrPubkey?: string
+  pubkey: string
+  keyType: 'main_key' | 'sub_key' | string
+  alg?: number
+}
+
 export interface JoyIDConfig {
   aggregator: Aggregator
-  connectData: ConnectResponseData
+  connectData: JoyIDConnectData
 }
 
 export enum CKBAsset {
@@ -35,7 +44,7 @@ export interface MakerParams extends BaseParams {
 }
 
 export interface MakerResult {
-  rawTx: CKBTransaction
+  rawTx: ccc.Transaction
   // The capacity(shannon) for packaging the order cell
   listPackage: bigint
   // Unit is shannon
@@ -50,11 +59,11 @@ export interface TakerParams extends BaseParams {
   platform?: Address
   platformFee?: number
   platformCell?: { txHash: Bytes; index: Bytes; capacity: bigint }
-  unitType?: CKBComponents.Script
+  unitType?: ccc.ScriptLike
 }
 
 export interface TakerResult {
-  rawTx: CKBTransaction
+  rawTx: ccc.Transaction
   // Unit is shannon
   txFee: bigint
   // The position of WitnessArgs in witnesses for lock script to sign transaction
@@ -67,7 +76,7 @@ export interface CancelParams extends BaseParams {
 }
 
 export interface CancelResult {
-  rawTx: CKBTransaction
+  rawTx: ccc.Transaction
   // Unit is shannon
   txFee: bigint
   // The position of WitnessArgs in witnesses for lock script to sign transaction
